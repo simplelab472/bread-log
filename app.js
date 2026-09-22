@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v25";
+const STORAGE_KEY = "breadLogIBM010C_v26";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -226,12 +226,20 @@ existing.records=existing.records.map(rec=>{
         }
       }
       if(!rec.status) rec.status="completed";
-    rec.updatedAt = nowIso();
-    rec.updatedAt = nowIso();
+
+      // v0.25 bug repair:
+      // unevaluated legacy records were incorrectly stamped as "now" on every launch.
+      // That made stale PC records look newer than evaluated phone records.
+      const hasEvaluation = !!(rec.rating || rec.comment || rec.next || rec.photo);
+      if(!hasEvaluation){
+        rec.updatedAt = rec.completedAt || rec.date || "";
+      }else if(!rec.updatedAt){
+        rec.updatedAt = rec.completedAt || rec.date || "";
+      }
       return rec;
     });
 
-    existing.version=25;
+    existing.version=26;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -887,8 +895,6 @@ document.getElementById("bakeForm").addEventListener("submit",async e=>{
   rec.next=document.getElementById("bakeNext").value.trim();
   rec.photo=newPhoto;
   rec.status="completed";
-    rec.updatedAt = nowIso();
-    rec.updatedAt = nowIso();
   rec.completedAt=new Date().toISOString();
   document.getElementById("bakeDialog").close();
   save();
@@ -1082,9 +1088,36 @@ function mergeBreadData(base, incoming){
   });
   inRecords.forEach(rec=>{
     if(!rec || !rec.id) return;
-    const ix=result.records.findIndex(x=>x.id===rec.id);
-    if(ix<0) result.records.push(JSON.parse(JSON.stringify(rec)));
-    else result.records[ix]={...result.records[ix],...JSON.parse(JSON.stringify(rec))};
+    const incomingRec=JSON.parse(JSON.stringify(rec));
+
+    // Repair timestamps polluted by v0.25 on unevaluated records.
+    const incomingHasEval=!!(incomingRec.rating || incomingRec.comment || incomingRec.next || incomingRec.photo);
+    if(!incomingHasEval){
+      incomingRec.updatedAt=incomingRec.completedAt || incomingRec.date || "";
+    }
+
+    const ix=result.records.findIndex(x=>x.id===incomingRec.id);
+    if(ix<0){
+      result.records.push(incomingRec);
+    }else{
+      const current=result.records[ix];
+      const currentHasEval=!!(current.rating || current.comment || current.next || current.photo);
+      if(!currentHasEval){
+        current.updatedAt=current.completedAt || current.date || "";
+      }
+
+      const a=recordUpdatedAt(current);
+      const b=recordUpdatedAt(incomingRec);
+      const score=x =>
+        (x?.rating ? 4 : 0) +
+        (x?.comment ? 2 : 0) +
+        (x?.next ? 1 : 0) +
+        (x?.photo ? 1 : 0);
+
+      if(b>a || (b===a && score(incomingRec)>score(current))){
+        result.records[ix]={...current,...incomingRec};
+      }
+    }
   });
   if(incoming?.machine) result.machine={...(result.machine||{}),...incoming.machine};
   result.version=20;
@@ -1096,9 +1129,10 @@ function recoverAllLocalData(seed){
   return merged;
 }
 function dataSummary(d){
-  const custom=(d?.recipes||[]).filter(r=>!["official","web"].includes(r.type)).length;
-  const history=(d?.records||[]).length;
-  return `カスタムレシピ ${custom}件・履歴 ${history}件`;
+  const custom=(d?.recipes||[]).filter(r=>r.type==="custom"||r.type==="variant").length;
+  const records=(d?.records||[]).length;
+  const evaluated=(d?.records||[]).filter(r=>r.rating||r.comment||r.next||r.photo).length;
+  return `カスタムレシピ ${custom}件・履歴 ${records}件・評価済み ${evaluated}件`;
 }
 
 
@@ -1321,7 +1355,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 25,
+    appVersion: 26,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1376,9 +1410,14 @@ function isValidDrivePayload(payload){
 
 async function connectDriveAfterToken(){
   const existing = await findDriveDataFile();
-  // Recover any recipes/history left in old localStorage versions before touching Drive.
-  data=recoverAllLocalData(data);
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+  // v0.26: run legacy localStorage recovery only once on this device.
+  // Re-running it on every connection can reintroduce stale historical copies.
+  const recoveryKey="breadLogLegacyRecovery_v26";
+  if(!localStorage.getItem(recoveryKey)){
+    data=recoverAllLocalData(data);
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+    localStorage.setItem(recoveryKey,"1");
+  }
 
   if(existing){
     driveFileId = existing.id;
@@ -1437,7 +1476,7 @@ async function syncNow(){
 
     driveSyncing=false;
     updateDriveUI(
-      `双方向同期完了：カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件 / ${new Date().toLocaleString("ja-JP")}`
+      `双方向同期完了：カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件 / ${new Date().toLocaleString("ja-JP")}`
     );
   }catch(e){
     console.error(e);
@@ -1506,3 +1545,8 @@ if ("serviceWorker" in navigator) {
     });
   });
 }
+
+function countEvaluatedRecords(){
+  return (data?.records||[]).filter(r=>r.rating || r.comment || r.next || r.photo).length;
+}
+

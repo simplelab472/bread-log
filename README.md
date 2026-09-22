@@ -257,3 +257,14 @@ https://www.googleapis.com/auth/drive.appdata
 - 自動保存時の queueDriveSave も同じ双方向同期処理を使用
 - 画面に同期方向を明記
 - Service Worker / app.js を v25 で強制更新
+
+
+## v0.26 評価同期の根本修正
+- 評価情報は Drive payload の data.records 内に rating/comment/next/photo として保存される
+- v0.25の重大バグ修正：起動時に全履歴へ updatedAt=現在時刻を付けていた処理を削除
+- 未評価履歴の誤った updatedAt は completedAt/date に戻して補正
+- 評価済み履歴が未評価履歴より正しく優先されるよう修正
+- 旧localStorage復旧もupdatedAt＋評価情報量でマージ
+- 旧版データの全走査は端末ごとに一度だけ
+- Drive状態表示に「評価済み ○件」を追加
+- Service Worker / app.js を v26 で強制更新
