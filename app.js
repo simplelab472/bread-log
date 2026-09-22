@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v21";
+const STORAGE_KEY = "breadLogIBM010C_v22";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -229,7 +229,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=21;
+    existing.version=22;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -1275,7 +1275,13 @@ async function findDriveDataFile(){
 async function readDriveData(fileId){
   const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
   if(!res.ok) throw new Error("Driveデータ読込エラー "+res.status);
-  return res.json();
+  const text=(await res.text()).replace(/^\uFEFF/,"").trim();
+  if(!text) throw new Error("Driveデータが空です");
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    throw new Error("Drive JSONの解析に失敗しました");
+  }
 }
 
 async function createDriveDataFile(payload){
@@ -1314,9 +1320,16 @@ function makeDrivePayload(){
 }
 
 function applyDrivePayload(payload){
-  if(!payload || !payload.data) throw new Error("Driveデータ形式が不正です");
+  if(!payload || typeof payload!=="object") throw new Error("Driveデータ形式が不正です");
 
-  const remote=payload.data;
+  // v17以降の正規形式: { schemaVersion, appVersion, updatedAt, data:{...} }
+  // 旧版/途中版の互換形式: { recipes, records, machine, settings, ... }
+  const remote = payload.data && typeof payload.data==="object"
+    ? payload.data
+    : (Array.isArray(payload.recipes) || Array.isArray(payload.records) ? payload : null);
+
+  if(!remote) throw new Error("Driveデータ形式が不正です");
+
   const local=data || {};
 
   const merged={
