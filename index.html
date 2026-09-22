@@ -11,6 +11,7 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>パン作り記録 - IBM-010-C</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -22,6 +23,23 @@
   </header>
 
   <main id="app">
+
+<section class="card drive-card" id="driveCard">
+  <div class="drive-card-head">
+    <div>
+      <h2>Google Drive</h2>
+      <div class="muted" id="driveStatusText">未接続（端末内データを使用中）</div>
+    </div>
+    <span class="status-pill" id="driveStatusPill">未接続</span>
+  </div>
+  <div class="drive-actions">
+    <button type="button" id="driveConnectBtn" class="primary">Google Driveに接続</button>
+    <button type="button" id="driveSyncBtn" class="secondary" hidden>今すぐ同期</button>
+    <button type="button" id="driveDisconnectBtn" class="secondary" hidden>接続解除</button>
+  </div>
+  <div class="small-note" id="driveDetailText">初回接続時に、この端末の現在データをGoogle Driveへ移行できます。</div>
+</section>
+
     <section class="page active" data-page="home">
       <div class="hero card">
         <div>

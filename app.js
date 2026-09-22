@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v15";
+const STORAGE_KEY = "breadLogIBM010C_v17";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -119,29 +119,8 @@ function defaultData(){
       ],
       notes:"公式レシピ。", officialUrl:"https://www.irisohyama.co.jp/home-bakery/compact-type/recipe/detail/?c=2&r=20&s=1"
     },
-    {
-      id:"r_apple1", item:"りんごパン", name:"りんごパン", version:"Ver.1", type:"custom", favorite:true,
-      menuNo:"13", menuName:"スイート食パン", rating:"",
-      ingredients:[
-        ["強力粉","250","g"],["砂糖","40","g"],["塩","3","g"],["スキムミルク","8","g"],["バター","25","g"],["水","155","ml"],["ドライイースト","3","g"],["りんご","120","g"]
-      ],
-      steps:["2026/9/20に実際に作った配合。工程の未確認部分は後から追記する。"],
-      notes:"初回実作配合。未確認の工程は推測で補完しない。"
-    },
-    {
-      id:"r_apple2", item:"りんごパン", name:"りんごパン", version:"Ver.2", type:"variant", favorite:false,
-      parentRecipeId:"r_apple1", menuNo:"13", menuName:"スイート食パン", rating:"",
-      ingredients:[
-        ["卵","50","g"],["牛乳","120","g"],["強力粉","250","g"],["砂糖","40","g"],["塩","3","g"],["バター","35","g"],["スキムミルク","6","g"],["ドライイースト","2.7","g"],
-        ["りんご","120","g"],["砂糖（フィリング）","15","g"],["バター（フィリング）","5","g"]
-      ],
-      steps:[
-        "りんごフィリングを作り、しっかり冷ます。前日に作る場合は粗熱を取って冷蔵保存する。",
-        "本体に生地材料をセットし「メニュー13 スイート食パン」で作成する。",
-        "具材投入のタイミングで冷ましたりんごフィリングを加える。"
-      ],
-      notes:"卵入りの改良検討版。9/20実作とは別レシピ。"
-    },
+    
+    
     {
       id:"r_cake", item:"ケーキ", name:"基本のケーキ", version:"標準", type:"official", favorite:false,
       menuNo:"20", menuName:"ケーキ", rating:"",
@@ -149,32 +128,7 @@ function defaultData(){
       steps:["バターを常温に戻し、薄力粉とベーキングパウダーを合わせてふるう。","材料を公式レシピの順序で入れる。","「メニュー20 ケーキ」でスタートする。","粉落とし音が鳴ったら内側の粉を落とす。","でき上がったら粗熱を取り、静かに振って取り出す。"],
       notes:"バナナケーキ等のベースに使える公式レシピ。", officialUrl:"https://www.irisohyama.co.jp/home-bakery/compact-type/recipe/detail/?c=6&r=44&s=1"
     },
-    {
-      id:"r_banana_cake", item:"バナナケーキ", name:"バナナケーキ", version:"Ver.1", type:"custom", favorite:true,
-      menuNo:"20", menuName:"ケーキ", rating:"",
-      ingredients:[
-        ["バナナ","2","本"],
-        ["卵","2","個"],
-        ["砂糖","70","g"],
-        ["無塩バター","80","g"],
-        ["薄力粉","180","g"],
-        ["ベーキングパウダー","8","g"]
-      ],
-      steps:[
-        "バターを常温に戻す。急ぐ場合は溶かしすぎないよう電子レンジで少しずつ柔らかくする。",
-        "バナナをフォークなどでつぶす。",
-        "薄力粉とベーキングパウダーを合わせてふるう。",
-        "パンケースに卵（全卵）、砂糖、バター、バナナを入れる。",
-        "その上から薄力粉とベーキングパウダーを加える。",
-        "メニュー20「ケーキ」でスタートする。",
-        "粉落としのお知らせが鳴ったら、ヘラでパンケース内側に残った粉を落とし、ふたを閉めてそのまま焼成を続ける。",
-        "焼き上がったら竹串などで中心まで焼けているか確認する。",
-        "焼き不足ならメニュー27「焼き」で10分程度追加焼きする。",
-        "焼き上がったらパンケースから取り出し、網などの上で冷ます。"
-      ],
-      notes:"以前相談したバナナケーキをアプリ用に登録。卵は全卵。薄力粉とベーキングパウダーは合わせてふるう。粉落とし後はふたを閉め、そのまま焼成。"
-    }
-  ];
+    ];
 
   // 公式60選＋標準メニューを全件保持。確認済みのレシピは材料・手順まで内蔵する。
   officialRecipeCatalog.forEach(([cat,name],i)=>{
@@ -321,7 +275,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=15;
+    existing.version=17;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -331,7 +285,8 @@ existing.records=existing.records.map(rec=>{
     return initial;
   }
 }
-function save(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); renderAll(); }
+function save(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+  if(typeof queueDriveSave==="function") queueDriveSave(); renderAll(); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m])); }
 function recipeById(id){ return data.recipes.find(r=>r.id===id); }
 function stars(n){ return n? "★★★★★".slice(0,+n)+"☆☆☆☆☆".slice(0,5-(+n)) : "未評価"; }
@@ -1124,6 +1079,247 @@ document.getElementById("copyAllForChat").onclick=()=>{
 };
 
 renderAll();
+
+
+
+// ==============================
+// Google Drive sync (v0.17)
+// Drive is the master after connection; localStorage remains a local cache.
+// ==============================
+const DRIVE_CLIENT_ID = "28938549507-62r2v0a08qu9b3vmi73gb1lp0knoi5qq.apps.googleusercontent.com";
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+const DRIVE_FILE_NAME = "bread-log-data.json";
+const DRIVE_META_KEY = "breadLogDriveMeta_v1";
+
+let driveTokenClient = null;
+let driveAccessToken = "";
+let driveFileId = "";
+let driveConnected = false;
+let driveSyncing = false;
+let driveSaveTimer = null;
+
+function getDriveMeta(){
+  try { return JSON.parse(localStorage.getItem(DRIVE_META_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function setDriveMeta(meta){ localStorage.setItem(DRIVE_META_KEY, JSON.stringify(meta)); }
+
+function updateDriveUI(message){
+  const pill = document.getElementById("driveStatusPill");
+  const text = document.getElementById("driveStatusText");
+  const detail = document.getElementById("driveDetailText");
+  const connect = document.getElementById("driveConnectBtn");
+  const sync = document.getElementById("driveSyncBtn");
+  const disconnect = document.getElementById("driveDisconnectBtn");
+  if(!pill || !text) return;
+
+  pill.classList.remove("connected","syncing");
+  if(driveSyncing){
+    pill.textContent="同期中";
+    pill.classList.add("syncing");
+    text.textContent="Google Driveと同期しています";
+  }else if(driveConnected){
+    pill.textContent="接続済み";
+    pill.classList.add("connected");
+    text.textContent="Google Driveを使用中";
+  }else{
+    pill.textContent="未接続";
+    text.textContent="未接続（端末内データを使用中）";
+  }
+  if(detail && message) detail.textContent=message;
+  if(connect) connect.hidden=driveConnected;
+  if(sync) sync.hidden=!driveConnected;
+  if(disconnect) disconnect.hidden=!driveConnected;
+}
+
+function initDriveClient(){
+  if(!window.google?.accounts?.oauth2) return false;
+  driveTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: DRIVE_CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: async (resp) => {
+      if(resp.error){
+        driveSyncing=false;
+        updateDriveUI("Google認証に失敗しました: "+resp.error);
+        return;
+      }
+      driveAccessToken = resp.access_token;
+      try{
+        await connectDriveAfterToken();
+      }catch(e){
+        console.error(e);
+        driveSyncing=false;
+        updateDriveUI("Drive接続に失敗しました: "+(e.message||e));
+      }
+    }
+  });
+  return true;
+}
+
+function requestDriveAccess(){
+  driveSyncing=true;
+  updateDriveUI("Googleアカウントの認証画面を開きます。");
+  if(!driveTokenClient && !initDriveClient()){
+    driveSyncing=false;
+    updateDriveUI("Google認証ライブラリの読み込み待ちです。数秒後にもう一度押してください。");
+    return;
+  }
+  driveTokenClient.requestAccessToken({prompt:"consent"});
+}
+
+async function driveFetch(url, options={}){
+  const headers = new Headers(options.headers||{});
+  headers.set("Authorization","Bearer "+driveAccessToken);
+  return fetch(url,{...options,headers});
+}
+
+async function findDriveDataFile(){
+  const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
+  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime,size)&pageSize=10`;
+  const res = await driveFetch(url);
+  if(!res.ok) throw new Error("Driveファイル検索エラー "+res.status);
+  const body = await res.json();
+  return body.files?.[0] || null;
+}
+
+async function readDriveData(fileId){
+  const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+  if(!res.ok) throw new Error("Driveデータ読込エラー "+res.status);
+  return res.json();
+}
+
+async function createDriveDataFile(payload){
+  const boundary = "breadlog_"+Date.now();
+  const metadata = {name:DRIVE_FILE_NAME, parents:["appDataFolder"], mimeType:"application/json"};
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`+
+    JSON.stringify(metadata)+
+    `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n`+
+    JSON.stringify(payload)+
+    `\r\n--${boundary}--`;
+  const res = await driveFetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,modifiedTime",
+    {method:"POST",headers:{"Content-Type":"multipart/related; boundary="+boundary},body}
+  );
+  if(!res.ok) throw new Error("Drive初回保存エラー "+res.status);
+  return res.json();
+}
+
+async function updateDriveDataFile(fileId, payload){
+  const res = await driveFetch(
+    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,modifiedTime`,
+    {method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}
+  );
+  if(!res.ok) throw new Error("Drive保存エラー "+res.status);
+  return res.json();
+}
+
+function makeDrivePayload(){
+  return {
+    schemaVersion: 1,
+    appVersion: 17,
+    updatedAt: new Date().toISOString(),
+    data
+  };
+}
+
+function applyDrivePayload(payload){
+  if(!payload || !payload.data) throw new Error("Driveデータ形式が不正です");
+  data = payload.data;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  if(typeof renderAll==="function") renderAll();
+}
+
+async function connectDriveAfterToken(){
+  const existing = await findDriveDataFile();
+  const meta = getDriveMeta();
+
+  if(existing){
+    driveFileId = existing.id;
+    const remote = await readDriveData(existing.id);
+
+    // On first connection on this device, ask which side to use when local data exists.
+    // Existing device with known Drive file: Drive wins as master.
+    if(!meta.fileId){
+      const localRaw = localStorage.getItem(STORAGE_KEY);
+      const hasLocal = !!localRaw;
+      if(hasLocal){
+        const useLocal = window.confirm(
+          "Google Driveに既存データがあります。\n\n"+
+          "OK：この端末の現在データをDriveへ上書き\n"+
+          "キャンセル：Driveのデータをこの端末へ読み込み"
+        );
+        if(useLocal){
+          await updateDriveDataFile(existing.id, makeDrivePayload());
+        }else{
+          applyDrivePayload(remote);
+        }
+      }else{
+        applyDrivePayload(remote);
+      }
+    }else{
+      applyDrivePayload(remote);
+    }
+  }else{
+    // No remote data: migrate current local data as first Drive master
+    const created = await createDriveDataFile(makeDrivePayload());
+    driveFileId = created.id;
+  }
+
+  driveConnected=true;
+  driveSyncing=false;
+  setDriveMeta({fileId:driveFileId, connected:true, lastSync:new Date().toISOString()});
+  updateDriveUI("同期済み。以降の変更はGoogle Driveへ保存します。");
+}
+
+async function syncNow(){
+  if(!driveConnected || !driveAccessToken || !driveFileId){
+    requestDriveAccess();
+    return;
+  }
+  driveSyncing=true;
+  updateDriveUI("Google Driveへ保存しています。");
+  try{
+    await updateDriveDataFile(driveFileId, makeDrivePayload());
+    setDriveMeta({fileId:driveFileId, connected:true, lastSync:new Date().toISOString()});
+    driveSyncing=false;
+    updateDriveUI("同期完了: "+new Date().toLocaleString("ja-JP"));
+  }catch(e){
+    driveSyncing=false;
+    updateDriveUI("同期に失敗しました: "+(e.message||e));
+  }
+}
+
+function queueDriveSave(){
+  if(!driveConnected || !driveAccessToken || !driveFileId) return;
+  clearTimeout(driveSaveTimer);
+  driveSaveTimer=setTimeout(()=>syncNow(),700);
+}
+
+function disconnectDrive(){
+  if(driveAccessToken && window.google?.accounts?.oauth2){
+    try{ google.accounts.oauth2.revoke(driveAccessToken,()=>{}); }catch(e){}
+  }
+  driveAccessToken="";
+  driveFileId="";
+  driveConnected=false;
+  driveSyncing=false;
+  localStorage.removeItem(DRIVE_META_KEY);
+  updateDriveUI("接続を解除しました。端末内データは残っています。");
+}
+
+window.addEventListener("load", ()=>{
+  setTimeout(()=>initDriveClient(),300);
+  document.getElementById("driveConnectBtn")?.addEventListener("click",requestDriveAccess);
+  document.getElementById("driveSyncBtn")?.addEventListener("click",syncNow);
+  document.getElementById("driveDisconnectBtn")?.addEventListener("click",disconnectDrive);
+  const meta=getDriveMeta();
+  if(meta.connected){
+    updateDriveUI("前回はGoogle Driveを使用していました。再接続するとDriveの最新データを読み込みます。");
+  }else{
+    updateDriveUI("初回接続時に、この端末の現在データをGoogle Driveへ移行します。");
+  }
+});
 
 
 // PWA: service worker registration

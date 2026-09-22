@@ -55,3 +55,12 @@ dialog{border:0;padding:0;border-radius:22px;background:transparent;width:min(72
 .heart-btn .heart-svg.filled{fill:#b24f57;stroke:#b24f57}
 .heart-btn.large .heart-svg{width:32px;height:32px}
 .heart-btn:active{transform:scale(.92)}
+
+.drive-card{margin:12px 0;padding:14px;border:1px solid #e4d5c6;border-radius:16px;background:#fffaf3}
+.drive-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.drive-card h2{margin:0 0 4px;font-size:1.05rem}
+.drive-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.status-pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#eee;color:#555;font-size:.78rem;white-space:nowrap}
+.status-pill.connected{background:#e7f5ea;color:#276738}
+.status-pill.syncing{background:#fff3d9;color:#7a5a00}
+.small-note{font-size:.82rem;color:#6f655d;margin-top:8px;line-height:1.45}

@@ -169,3 +169,22 @@ PWAとしてインストールするには、`file://` で直接開くのでは�
 ## v0.16 GitHub簡単アップロード版
 - iconsフォルダをなくし、全ファイルをトップ階層に配置
 - GitHubのUpload filesで全ファイルをまとめて選択可能
+
+
+## v0.17 Google Drive連携
+- Google Identity Services + Google Drive API (`drive.appdata`) 対応
+- Client ID組み込み済み
+- 初回接続時、端末内localStorageの現在データをDriveへ移行
+- Drive接続後はDriveを正本として保存
+- localStorageは端末キャッシュとして残す
+- 手動「今すぐ同期」ボタン追加
+- 接続解除ボタン追加
+- GitHub公開ソースから個人履歴・個人用カスタムレシピの初期埋め込みを除去
+- 注意：既にブラウザ内にある既存localStorageは削除せず、Drive初回移行に利用
+
+### Google Cloud設定
+Authorized JavaScript origin:
+https://simplelab472.github.io
+
+Scope:
+https://www.googleapis.com/auth/drive.appdata
