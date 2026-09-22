@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v17";
+const STORAGE_KEY = "breadLogIBM010C_v19";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -275,7 +275,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=17;
+    existing.version=19;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -1097,6 +1097,7 @@ let driveFileId = "";
 let driveConnected = false;
 let driveSyncing = false;
 let driveSaveTimer = null;
+let driveAutoConnecting = false;
 
 function getDriveMeta(){
   try { return JSON.parse(localStorage.getItem(DRIVE_META_KEY) || "{}"); }
@@ -1113,6 +1114,9 @@ function updateDriveUI(message){
   const disconnect = document.getElementById("driveDisconnectBtn");
   if(!pill || !text) return;
 
+  const meta=getDriveMeta();
+  const linked=!!meta.connected;
+
   pill.classList.remove("connected","syncing");
   if(driveSyncing){
     pill.textContent="同期中";
@@ -1122,14 +1126,22 @@ function updateDriveUI(message){
     pill.textContent="接続済み";
     pill.classList.add("connected");
     text.textContent="Google Driveを使用中";
+  }else if(linked){
+    pill.textContent="連携済み";
+    pill.classList.add("connected");
+    text.textContent="Google Drive連携済み（再認証待ち）";
   }else{
     pill.textContent="未接続";
     text.textContent="未接続（端末内データを使用中）";
   }
+
   if(detail && message) detail.textContent=message;
-  if(connect) connect.hidden=driveConnected;
+  if(connect){
+    connect.hidden=driveConnected;
+    connect.textContent=linked && !driveConnected ? "Google Driveに再接続" : "Google Driveに接続";
+  }
   if(sync) sync.hidden=!driveConnected;
-  if(disconnect) disconnect.hidden=!driveConnected;
+  if(disconnect) disconnect.hidden=!linked;
 }
 
 function initDriveClient(){
@@ -1140,31 +1152,52 @@ function initDriveClient(){
     callback: async (resp) => {
       if(resp.error){
         driveSyncing=false;
-        updateDriveUI("Google認証に失敗しました: "+resp.error);
+        const wasAuto=driveAutoConnecting;
+        driveAutoConnecting=false;
+        updateDriveUI(wasAuto
+          ? "自動接続できませんでした。端末内キャッシュを表示しています。必要な場合だけ再接続してください。"
+          : "Google認証に失敗しました: "+resp.error);
         return;
       }
       driveAccessToken = resp.access_token;
       try{
         await connectDriveAfterToken();
+        driveAutoConnecting=false;
       }catch(e){
         console.error(e);
         driveSyncing=false;
-        updateDriveUI("Drive接続に失敗しました: "+(e.message||e));
+        const wasAuto=driveAutoConnecting;
+        driveAutoConnecting=false;
+        updateDriveUI(wasAuto
+          ? "Driveへ自動接続できませんでした。端末内キャッシュを表示しています。"
+          : "Drive接続に失敗しました: "+(e.message||e));
       }
     }
   });
   return true;
 }
 
-function requestDriveAccess(){
+function requestDriveAccess(silent=false){
   driveSyncing=true;
-  updateDriveUI("Googleアカウントの認証画面を開きます。");
+  driveAutoConnecting=!!silent;
+  updateDriveUI(silent ? "Google Driveへ自動接続しています…" : "Googleアカウントの認証画面を開きます。");
+
   if(!driveTokenClient && !initDriveClient()){
     driveSyncing=false;
-    updateDriveUI("Google認証ライブラリの読み込み待ちです。数秒後にもう一度押してください。");
+    driveAutoConnecting=false;
+    updateDriveUI("Google認証ライブラリの読み込み待ちです。数秒後にもう一度お試しください。");
     return;
   }
-  driveTokenClient.requestAccessToken({prompt:"consent"});
+
+  try{
+    driveTokenClient.requestAccessToken({prompt:silent ? "" : "consent"});
+  }catch(e){
+    driveSyncing=false;
+    driveAutoConnecting=false;
+    updateDriveUI(silent
+      ? "自動接続できませんでした。必要なときだけ「Google Driveに再接続」を押してください。"
+      : "Google認証を開始できませんでした。");
+  }
 }
 
 async function driveFetch(url, options={}){
@@ -1269,12 +1302,12 @@ async function connectDriveAfterToken(){
   driveConnected=true;
   driveSyncing=false;
   setDriveMeta({fileId:driveFileId, connected:true, lastSync:new Date().toISOString()});
-  updateDriveUI("同期済み。以降の変更はGoogle Driveへ保存します。");
+  updateDriveUI("Google Driveに接続済み。最新データを使用しています。");
 }
 
 async function syncNow(){
   if(!driveConnected || !driveAccessToken || !driveFileId){
-    requestDriveAccess();
+    requestDriveAccess(false);
     return;
   }
   driveSyncing=true;
@@ -1309,14 +1342,27 @@ function disconnectDrive(){
 }
 
 window.addEventListener("load", ()=>{
-  setTimeout(()=>initDriveClient(),300);
-  document.getElementById("driveConnectBtn")?.addEventListener("click",requestDriveAccess);
+  document.getElementById("driveConnectBtn")?.addEventListener("click",()=>requestDriveAccess(false));
   document.getElementById("driveSyncBtn")?.addEventListener("click",syncNow);
   document.getElementById("driveDisconnectBtn")?.addEventListener("click",disconnectDrive);
+
   const meta=getDriveMeta();
   if(meta.connected){
-    updateDriveUI("前回はGoogle Driveを使用していました。再接続するとDriveの最新データを読み込みます。");
+    updateDriveUI("Google Driveへ自動接続しています。成功すると最新データを読み込みます。");
+    // GIS script is async/defer, so wait briefly until it is available.
+    let tries=0;
+    const timer=setInterval(()=>{
+      tries++;
+      if(initDriveClient()){
+        clearInterval(timer);
+        requestDriveAccess(true);
+      }else if(tries>=20){
+        clearInterval(timer);
+        updateDriveUI("Google認証ライブラリを読み込めませんでした。端末内キャッシュを表示しています。");
+      }
+    },250);
   }else{
+    setTimeout(()=>initDriveClient(),300);
     updateDriveUI("初回接続時に、この端末の現在データをGoogle Driveへ移行します。");
   }
 });

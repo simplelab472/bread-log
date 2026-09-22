@@ -188,3 +188,20 @@ https://simplelab472.github.io
 
 Scope:
 https://www.googleapis.com/auth/drive.appdata
+
+
+## v0.18 Drive表示・再認証改善
+- Google Drive連携パネルを常時トップ表示から「機種」画面へ移動
+- 画面更新後は「未接続」ではなく「連携済み（再認証待ち）」と表示
+- 再認証前の変更は端末内localStorageに保持
+- Google Driveへの書き込みは再接続後に実行
+- ブラウザ側にアクセストークンを恒久保存しない安全設計は維持
+
+
+## v0.19 Google Drive自動再接続
+- Google Drive連携済み端末では、アプリ起動時に自動でアクセストークン再取得を試行
+- 自動接続成功時はDriveの最新JSONを自動読込
+- 通常は「再接続」操作を不要化
+- 自動接続に失敗した場合のみ再接続ボタンを使用
+- 自動接続失敗時もlocalStorageキャッシュでアプリ利用継続
+- Google Driveを正本、localStorageをキャッシュとして扱う方針を維持
