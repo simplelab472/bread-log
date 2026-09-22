@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v32";
+const STORAGE_KEY = "breadLogIBM010C_v33";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -189,7 +189,7 @@ function load(){
     // v0.6 data first. If absent, migrate the latest previous data once.
     let raw=localStorage.getItem(STORAGE_KEY);
     if(!raw){
-      for(let v=31;v>=1;v--){
+      for(const v of [31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1]){
         const candidate=localStorage.getItem(`breadLogIBM010C_v${v}`);
         if(candidate){ raw=candidate; break; }
       }
@@ -201,6 +201,8 @@ function load(){
     }
 
     const existing=JSON.parse(raw);
+    const schemaRepaired=repairRecipeSchema(existing);
+
     const fresh=defaultData();
 
     existing.recipes=existing.recipes||[];
@@ -262,8 +264,11 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=32;
+    existing.version=33;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
+    if(schemaRepaired){
+      try{ localStorage.setItem(STORAGE_KEY,JSON.stringify(existing)); }catch(e){}
+    }
     return existing;
   }catch(e){
     console.error("load failed",e);
@@ -683,6 +688,43 @@ document.getElementById("cancelRecipe").onclick=()=>document.getElementById("rec
 document.getElementById("addRecipe").onclick=()=>openRecipeForm();
 document.getElementById("quickRecipe").onclick=()=>openRecipeForm();
 
+
+
+function normalizeRecipeIngredients(value){
+  if(Array.isArray(value)){
+    return value.map(x=>{
+      if(Array.isArray(x)) return [String(x[0]??""),String(x[1]??""),String(x[2]??"")];
+      if(x && typeof x==="object") return [String(x.name??""),String(x.qty??""),String(x.unit??"")];
+      return [String(x??""),"",""];
+    }).filter(x=>x[0].trim()!=="");
+  }
+  if(typeof value==="string"){
+    const sep=value.includes(";;") ? ";;" : "\n";
+    return value.split(sep).map(s=>s.trim()).filter(Boolean).map(line=>{
+      const p=line.split("|").map(x=>x.trim());
+      return [p[0]||"",p[1]||"",p[2]||""];
+    }).filter(x=>x[0]);
+  }
+  return [];
+}
+function normalizeRecipeSteps(value){
+  if(Array.isArray(value)) return value.map(x=>String(x??"").trim()).filter(Boolean);
+  if(typeof value==="string"){
+    const sep=value.includes(";;") ? ";;" : "\n";
+    return value.split(sep).map(x=>x.trim()).filter(Boolean);
+  }
+  return [];
+}
+function repairRecipeSchema(target){
+  if(!target || !Array.isArray(target.recipes)) return false;
+  let changed=false;
+  target.recipes.forEach(r=>{
+    if(!Array.isArray(r.ingredients)){ r.ingredients=normalizeRecipeIngredients(r.ingredients); changed=true; }
+    if(!Array.isArray(r.steps)){ r.steps=normalizeRecipeSteps(r.steps); changed=true; }
+    if(!r.version && r.recipeVersion){ r.version=String(r.recipeVersion); delete r.recipeVersion; changed=true; }
+  });
+  return changed;
+}
 
 function parseIngredientsText(txt){
   return txt.split("\n").map(x=>x.trim()).filter(Boolean).map(line=>{
@@ -1356,6 +1398,7 @@ function mergeBreadData(base, incoming){
   });
   if(incoming?.machine) result.machine={...(result.machine||{}),...incoming.machine};
   result.version=20;
+  repairRecipeSchema(result);
   return result;
 }
 function recoverAllLocalData(seed){
@@ -1617,7 +1660,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 32,
+    appVersion: 33,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1807,130 +1850,92 @@ window.addEventListener("load", ()=>{
 
 
 
-// ==============================
-// Recipe CSV import (v0.32)
-// ==============================
 function parseRecipeCsv(text){
-  const rows=[];
-  let row=[], field="", quoted=false;
+  const rows=[]; let row=[],field="",quoted=false;
   const s=String(text||"").replace(/^\uFEFF/,"");
-
   for(let i=0;i<s.length;i++){
     const ch=s[i];
     if(quoted){
-      if(ch==='"' && s[i+1]==='"'){
-        field+='"';
-        i++;
-      }else if(ch==='"'){
-        quoted=false;
-      }else{
-        field+=ch;
-      }
+      if(ch==='"' && s[i+1]==='"'){ field+='"'; i++; }
+      else if(ch==='"') quoted=false;
+      else field+=ch;
     }else{
-      if(ch==='"'){
-        quoted=true;
-      }else if(ch===','){
-        row.push(field);
-        field="";
-      }else if(ch==='\n'){
-        row.push(field);
-        field="";
-        if(row.some(v=>String(v).trim()!=="")) rows.push(row);
-        row=[];
-      }else if(ch!=='\r'){
-        field+=ch;
-      }
+      if(ch==='"') quoted=true;
+      else if(ch===','){ row.push(field); field=""; }
+      else if(ch==='\n'){ row.push(field); field=""; if(row.some(v=>String(v).trim()!=="")) rows.push(row); row=[]; }
+      else if(ch!=='\r') field+=ch;
     }
   }
   row.push(field);
   if(row.some(v=>String(v).trim()!=="")) rows.push(row);
   return rows;
 }
-
-function csvHeaderKey(v){
-  return String(v||"").trim().toLowerCase().replace(/\s+/g,"");
+function csvHeaderKey(v){ return String(v||"").trim().toLowerCase().replace(/\s+/g,""); }
+function csvIngredientsToArray(v){
+  return String(v||"").split(";;").map(s=>s.trim()).filter(Boolean).map(s=>{
+    const p=s.split("|").map(x=>x.trim());
+    return [p[0]||"",p[1]||"",p[2]||""];
+  }).filter(x=>x[0]);
 }
-
-function csvIngredientsToInternal(v){
-  return String(v||"")
-    .split(";;")
-    .map(s=>s.trim())
-    .filter(Boolean)
-    .map(s=>{
-      const p=s.split("|").map(x=>x.trim());
-      return `${p[0]||""} | ${p[1]||""} | ${p[2]||""}`;
-    })
-    .join("\n");
+function csvStepsToArray(v){
+  return String(v||"").split(";;").map(s=>s.trim()).filter(Boolean);
 }
-
-function csvStepsToInternal(v){
-  return String(v||"")
-    .split(";;")
-    .map(s=>s.trim())
-    .filter(Boolean)
-    .join("\n");
-}
-
 function importRecipeCsvText(text){
   const rows=parseRecipeCsv(text);
   if(rows.length<2) throw new Error("CSVにデータ行がありません。");
-
   const headers=rows[0].map(csvHeaderKey);
   const required=["name","item","version","menuno","menuname","ingredients","steps","notes"];
   const missing=required.filter(h=>!headers.includes(h));
-  if(missing.length){
-    throw new Error("必要な列がありません: "+missing.join(", "));
-  }
-
+  if(missing.length) throw new Error("必要な列がありません: "+missing.join(", "));
   const col=Object.fromEntries(headers.map((h,i)=>[h,i]));
-  const staged=[];
-  let skipped=0;
-
+  const staged=[]; let skipped=0;
   for(const row of rows.slice(1)){
     const name=String(row[col.name]||"").trim();
     if(!name){ skipped++; continue; }
-
     const now=new Date().toISOString();
     staged.push({
-      id:"r_csv_"+Date.now()+"_"+Math.random().toString(36).slice(2,9),
-      name,
+      id:uid("r"),
       item:String(row[col.item]||name).trim()||name,
+      name,
+      version:String(row[col.version]||"Ver.1").trim()||"Ver.1",
+      versionNote:"",
       type:"custom",
-      recipeVersion:String(row[col.version]||"Ver.1").trim()||"Ver.1",
-      recipeVersionNote:"",
+      parentRecipeId:"",
+      favorite:false,
+      rating:"",
       menuNo:String(row[col.menuno]||"").trim(),
       menuName:String(row[col.menuname]||"").trim(),
-      ingredients:csvIngredientsToInternal(row[col.ingredients]),
-      steps:csvStepsToInternal(row[col.steps]),
+      ingredients:csvIngredientsToArray(row[col.ingredients]),
+      steps:csvStepsToArray(row[col.steps]),
       notes:String(row[col.notes]||"").trim(),
-      favorite:false,
       createdAt:now,
       updatedAt:now
     });
   }
-
   if(!staged.length) throw new Error("登録できるレシピがありません。");
-
-  // Validate the whole CSV first, then change data once.
+  staged.forEach(r=>{
+    if(!Array.isArray(r.ingredients) || r.ingredients.some(x=>!Array.isArray(x)) || !Array.isArray(r.steps)){
+      throw new Error("レシピ形式の変換に失敗しました。");
+    }
+  });
   data.recipes=[...staged,...data.recipes];
   save();
   renderAll();
-  return {added:staged.length, skipped};
+  return {added:staged.length,skipped};
 }
+const RECIPE_CSV_PROMPT=`パン作り記録アプリへインポートするCSVを作成してください。
 
-const RECIPE_CSV_PROMPT = `パン作り記録アプリへインポートするCSVを作成してください。
-
-【ヘッダー】
+【必須ヘッダー】
 name,item,version,menuNo,menuName,ingredients,steps,notes
 
-【列の意味】
+【各列】
 - name: レシピ名
 - item: レシピの系列名
 - version: 例 Ver.1
 - menuNo: ホームベーカリーのメニュー番号
 - menuName: メニュー名
-- ingredients: 「材料名|数量|単位」の形式。複数材料は ;; で区切る
-- steps: 1ステップずつ記述。複数ステップは ;; で区切る
+- ingredients: 材料を「材料名|数量|単位」で記述し、複数材料は ;; で区切る
+- steps: 作り方を1ステップずつ記述し、複数ステップは ;; で区切る
 - notes: 補足・注意点
 
 【重要】
@@ -1950,33 +1955,22 @@ document.addEventListener("DOMContentLoaded",()=>{
   const importBtn=document.getElementById("importRecipeCsvBtn");
   const fileInput=document.getElementById("recipeCsvFile");
   const promptBtn=document.getElementById("copyRecipeCsvPromptBtn");
-
   importBtn?.addEventListener("click",()=>fileInput?.click());
-
   fileInput?.addEventListener("change",async()=>{
-    const file=fileInput.files?.[0];
-    if(!file) return;
-
+    const file=fileInput.files?.[0]; if(!file)return;
     try{
       const result=importRecipeCsvText(await file.text());
       toast(`レシピを${result.added}件追加しました`+(result.skipped?`（${result.skipped}件スキップ）`:""));
     }catch(e){
+      console.error(e);
       alert("CSVの読み込みに失敗しました。\n"+(e?.message||e));
-    }finally{
-      fileInput.value="";
-    }
+    }finally{ fileInput.value=""; }
   });
-
   promptBtn?.addEventListener("click",async()=>{
-    try{
-      await navigator.clipboard.writeText(RECIPE_CSV_PROMPT);
-    }catch(e){
-      const ta=document.createElement("textarea");
-      ta.value=RECIPE_CSV_PROMPT;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
+    try{ await navigator.clipboard.writeText(RECIPE_CSV_PROMPT); }
+    catch(e){
+      const ta=document.createElement("textarea"); ta.value=RECIPE_CSV_PROMPT;
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
     }
     toast("CSV作成用プロンプトをコピーしました");
   });

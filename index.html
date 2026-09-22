@@ -7,15 +7,15 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="パン作り記録" />
-  <link rel="manifest" href="manifest.webmanifest?v=32" />
+  <link rel="manifest" href="manifest.webmanifest?v=33" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>パン作り記録 - IBM-010-C</title>
-  <link rel="stylesheet" href="styles.css?v=32" />
+  <link rel="stylesheet" href="styles.css?v=33" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <script>
 (function(){
-  const resetKey="breadLogCacheReset_v32";
+  const resetKey="breadLogCacheReset_v33";
   if(!localStorage.getItem(resetKey)){
     localStorage.setItem(resetKey,"1");
     if("caches" in window){
@@ -29,8 +29,8 @@
       }).then(()=>{
         // Reload once with a query parameter so GitHub/CDN/browser cannot reuse old index/app.
         const u=new URL(location.href);
-        if(u.searchParams.get("v")!=="32"){
-          u.searchParams.set("v","32");
+        if(u.searchParams.get("v")!=="33"){
+          u.searchParams.set("v","33");
           location.replace(u.toString());
         }
       }).catch(()=>{});
@@ -184,7 +184,7 @@
     <button type="button" id="driveSyncBtn" class="secondary" hidden>Driveと同期</button>
     <button type="button" id="driveDisconnectBtn" class="secondary" hidden>接続解除</button>
   </div>
-  <div class="small-note" id="appVersionLabel">アプリ版 v0.32</div>
+  <div class="small-note" id="appVersionLabel">アプリ版 v0.33</div>
   <div class="small-note">同期の動き：Driveの最新正常スナップショットを取得 → 端末データとマージ → 新しいスナップショットとして保存</div>
   <div class="small-note" id="driveDetailText">初回接続時に、この端末の現在データをGoogle Driveへ移行できます。</div>
 </section>
@@ -331,8 +331,7 @@
         <strong>Google Drive同期</strong>
         <p>Google Driveへ自動同期するにはGoogle OAuthのClient IDが必要です。初期版ではバックアップJSONをDriveへ保存する運用が可能です。</p>
       </div>
-      
-      <div class="csv-settings-section">
+            <div class="csv-settings-section">
         <h3>レシピCSV</h3>
         <p class="muted">ChatGPTなどで作成したCSVから、複数レシピをまとめて登録できます。</p>
         <button type="button" id="importRecipeCsvBtn" class="secondary full">レシピCSVをインポート</button>
@@ -346,6 +345,6 @@
   </dialog>
 
   <div id="toast" class="toast"></div>
-  <script src="app.js?v=32"></script>
+  <script src="app.js?v=33"></script>
 </body>
 </html>
