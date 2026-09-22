@@ -280,3 +280,13 @@ https://www.googleapis.com/auth/drive.appdata
 - 接続時も同じ安全なマージロジックを使用
 - 評価保存時に updatedAt を確実に更新
 - Service Worker / app.js を v27 で強制更新
+
+
+## v0.28 Driveスナップショット同期
+- 既存DriveファイルへのPATCH更新を廃止
+- 同期のたびに新しい `bread-log-data.json` を appDataFolder に作成
+- 読込時は modifiedTime の新しい順に最大20件を確認し、最新の正常JSONを採用
+- 壊れたスナップショットは自動スキップ
+- 過去スナップショットはバックアップとして残る
+- Drive書込エラー時はHTTPステータスとGoogle APIの応答一部を画面表示
+- 端末側のデータは同期失敗でも保持

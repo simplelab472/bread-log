@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v27";
+const STORAGE_KEY = "breadLogIBM010C_v28";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -262,7 +262,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=27;
+    existing.version=28;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -1326,19 +1326,32 @@ function requestDriveAccess(silent=false){
   }
 }
 
+
+async function driveErrorText(res){
+  try{
+    const t=await res.text();
+    return t ? ` / ${t.slice(0,300)}` : "";
+  }catch(e){ return ""; }
+}
+
 async function driveFetch(url, options={}){
   const headers = new Headers(options.headers||{});
   headers.set("Authorization","Bearer "+driveAccessToken);
   return fetch(url,{...options,headers});
 }
 
-async function findDriveDataFile(){
+async function listDriveDataFiles(){
   const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
-  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime,size)&pageSize=10`;
+  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime%20desc&pageSize=20`;
   const res = await driveFetch(url);
-  if(!res.ok) throw new Error("Driveファイル検索エラー "+res.status);
+  if(!res.ok) throw new Error("Driveファイル検索エラー "+res.status+(await driveErrorText(res)));
   const body = await res.json();
-  return body.files?.[0] || null;
+  return body.files || [];
+}
+
+async function findDriveDataFile(){
+  const files=await listDriveDataFiles();
+  return files[0] || null;
 }
 
 async function readDriveData(fileId){
@@ -1366,7 +1379,7 @@ async function createDriveDataFile(payload){
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,modifiedTime",
     {method:"POST",headers:{"Content-Type":"multipart/related; boundary="+boundary},body}
   );
-  if(!res.ok) throw new Error("Drive初回保存エラー "+res.status);
+  if(!res.ok) throw new Error("Drive新規保存エラー "+res.status+(await driveErrorText(res)));
   return res.json();
 }
 
@@ -1375,14 +1388,14 @@ async function updateDriveDataFile(fileId, payload){
     `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,modifiedTime`,
     {method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}
   );
-  if(!res.ok) throw new Error("Drive保存エラー "+res.status);
+  if(!res.ok) throw new Error("Drive保存エラー "+res.status+(await driveErrorText(res)));
   return res.json();
 }
 
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 27,
+    appVersion: 28,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1426,29 +1439,38 @@ function isValidDrivePayload(payload){
   return false;
 }
 
+
+async function loadLatestValidDriveSnapshot(){
+  const files=await listDriveDataFiles();
+  for(const f of files){
+    try{
+      const payload=await readDriveData(f.id);
+      if(isValidDrivePayload(payload)){
+        return {file:f, payload};
+      }
+    }catch(e){
+      console.warn("Skipping unreadable Drive snapshot", f.id, e);
+    }
+  }
+  return {file:null, payload:null};
+}
+
 async function connectDriveAfterToken(){
   const localSnapshot=JSON.parse(JSON.stringify(data || {}));
-  const existing=await findDriveDataFile();
+  const latest=await loadLatestValidDriveSnapshot();
 
-  if(existing){
-    driveFileId=existing.id;
-    const remote=await readDriveData(existing.id);
-
-    const merged=isValidDrivePayload(remote)
-      ? buildMergedData(remote, localSnapshot)
-      : localSnapshot;
-
+  if(latest.payload){
+    const merged=buildMergedData(latest.payload, localSnapshot);
     data=merged;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    if(typeof renderAll==="function") renderAll();
-
-    // Normalize/repair Drive with exactly what is now shown.
-    await updateDriveDataFile(existing.id, makeDrivePayload());
+    driveFileId=latest.file.id;
   }else{
     data=localSnapshot;
     const created=await createDriveDataFile(makeDrivePayload());
     driveFileId=created.id;
   }
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  if(typeof renderAll==="function") renderAll();
 
   driveConnected=true;
   driveSyncing=false;
@@ -1467,33 +1489,22 @@ async function syncNow(){
   driveSyncing=true;
   updateDriveUI("Google Driveと同期しています。");
 
-  // Critical: freeze the current device state before any Drive read.
   const localSnapshot=JSON.parse(JSON.stringify(data || {}));
 
   try{
-    const existing=await findDriveDataFile();
+    const latest=await loadLatestValidDriveSnapshot();
+    const merged=latest.payload
+      ? buildMergedData(latest.payload, localSnapshot)
+      : localSnapshot;
 
-    if(!existing){
-      data=localSnapshot;
-      const created=await createDriveDataFile(makeDrivePayload());
-      driveFileId=created.id;
-    }else{
-      driveFileId=existing.id;
-      const remote=await readDriveData(existing.id);
+    data=merged;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if(typeof renderAll==="function") renderAll();
 
-      // Invalid/corrupt Drive content: keep local snapshot and repair Drive.
-      const merged=isValidDrivePayload(remote)
-        ? buildMergedData(remote, localSnapshot)
-        : localSnapshot;
-
-      // Only now commit merged data to the UI/local cache.
-      data=merged;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      if(typeof renderAll==="function") renderAll();
-
-      // Then persist the same merged state to Drive.
-      await updateDriveDataFile(existing.id, makeDrivePayload());
-    }
+    // v0.28: do NOT PATCH an existing Drive file.
+    // Save a new immutable snapshot every time.
+    const created=await createDriveDataFile(makeDrivePayload());
+    driveFileId=created.id;
 
     setDriveMeta({
       fileId:driveFileId,
@@ -1503,18 +1514,16 @@ async function syncNow(){
 
     driveSyncing=false;
     updateDriveUI(
-      `同期完了：カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件 / ${new Date().toLocaleString("ja-JP")}`
+      `同期完了：Driveへ新規スナップショット保存 / カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件 / ${new Date().toLocaleString("ja-JP")}`
     );
   }catch(e){
     console.error(e);
-
-    // Never roll the screen back when sync fails.
     data=localSnapshot;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     if(typeof renderAll==="function") renderAll();
 
     driveSyncing=false;
-    updateDriveUI("同期に失敗しました。端末側の変更は保持されています。");
+    updateDriveUI("同期に失敗しました："+(e.message||e)+"。端末側の変更は保持されています。");
   }
 }
 
