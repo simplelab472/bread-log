@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v26";
+const STORAGE_KEY = "breadLogIBM010C_v27";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -88,6 +88,29 @@ const menuCatalog = [
 
 
 function nowIso(){ return new Date().toISOString(); }
+function safeIso(v){
+  if(!v) return "";
+  const d=new Date(v);
+  return Number.isNaN(d.getTime()) ? String(v) : d.toISOString();
+}
+function evalScore(r){
+  return (r?.rating ? 8 : 0) +
+         (r?.comment ? 4 : 0) +
+         (r?.next ? 2 : 0) +
+         (r?.photo ? 1 : 0) +
+         (r?.status==="completed" ? 1 : 0);
+}
+function normalizeRecordForMerge(r){
+  const x={...(r||{})};
+  const hasEval=!!(x.rating || x.comment || x.next || x.photo);
+  // Any evaluated record must have a real update timestamp.
+  if(hasEval && !x.updatedAt) x.updatedAt=x.completedAt || x.date || "";
+  if(!hasEval && x.updatedAt && safeIso(x.updatedAt) > safeIso(new Date().toISOString())){
+    x.updatedAt=x.completedAt || x.date || "";
+  }
+  return x;
+}
+
 function touchRecord(rec){ if(rec) rec.updatedAt=nowIso(); }
 function recordUpdatedAt(rec){
   return rec?.updatedAt || rec?.completedAt || rec?.date || "";
@@ -239,7 +262,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=26;
+    existing.version=27;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -897,7 +920,8 @@ document.getElementById("bakeForm").addEventListener("submit",async e=>{
   rec.status="completed";
   rec.completedAt=new Date().toISOString();
   document.getElementById("bakeDialog").close();
-  save();
+  rec.updatedAt = nowIso();
+    save();
   nav("history");
   toast("評価を保存しました");
 });
@@ -1137,32 +1161,40 @@ function dataSummary(d){
 
 
 function mergeRecordsByFreshness(remoteRecords=[], localRecords=[]){
-  const map=new Map();
-  const put=(rec, source)=>{
-    if(!rec || !rec.id) return;
-    const existing=map.get(rec.id);
-    if(!existing){
-      map.set(rec.id,{...rec});
-      return;
-    }
-    const a=recordUpdatedAt(existing);
-    const b=recordUpdatedAt(rec);
-    if(b > a){
-      map.set(rec.id,{...existing,...rec});
-    }else if(b === a){
-      // Prefer the version with more evaluation content when timestamps tie/are absent.
-      const score=x =>
-        (x?.rating ? 4 : 0) +
-        (x?.comment ? 2 : 0) +
-        (x?.next ? 1 : 0) +
-        (x?.photo ? 1 : 0) +
-        (x?.status==="completed" ? 1 : 0);
-      if(score(rec) > score(existing)) map.set(rec.id,{...existing,...rec});
-    }
+  const byId=new Map();
+
+  const choose=(a,b)=>{
+    if(!a) return normalizeRecordForMerge(b);
+    if(!b) return normalizeRecordForMerge(a);
+
+    const A=normalizeRecordForMerge(a);
+    const B=normalizeRecordForMerge(b);
+
+    const ta=safeIso(A.updatedAt || A.completedAt || A.date || "");
+    const tb=safeIso(B.updatedAt || B.completedAt || B.date || "");
+
+    if(tb>ta) return {...A,...B};
+    if(ta>tb) return {...B,...A};
+
+    // When timestamps tie, never let an unevaluated copy erase evaluated data.
+    const sa=evalScore(A);
+    const sb=evalScore(B);
+    if(sb>sa) return {...A,...B};
+    if(sa>sb) return {...B,...A};
+
+    // Final tie: prefer local-side argument B so immediate edits are preserved.
+    return {...A,...B};
   };
-  remoteRecords.forEach(r=>put(r,"remote"));
-  localRecords.forEach(r=>put(r,"local"));
-  return Array.from(map.values());
+
+  remoteRecords.forEach(r=>{
+    if(r?.id) byId.set(r.id, normalizeRecordForMerge(r));
+  });
+  localRecords.forEach(r=>{
+    if(!r?.id) return;
+    byId.set(r.id, choose(byId.get(r.id), r));
+  });
+
+  return Array.from(byId.values());
 }
 
 function mergeRecipesById(remoteRecipes=[], localRecipes=[]){
@@ -1313,15 +1345,10 @@ async function readDriveData(fileId){
   const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
   if(!res.ok) throw new Error("Driveデータ読込エラー "+res.status);
   const text=(await res.text()).replace(/^\uFEFF/,"").trim();
-
-  // Empty / malformed JSON can occur after an interrupted older-version write.
-  // Do not abort here: return an invalid marker so connectDriveAfterToken()
-  // can rebuild Drive from the recovered local cache.
   if(!text) return {__invalidDriveData:true, reason:"empty"};
   try{
     return JSON.parse(text);
   }catch(e){
-    console.warn("Drive JSON is malformed; repairing from local cache.");
     return {__invalidDriveData:true, reason:"json-parse"};
   }
 }
@@ -1355,36 +1382,24 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 26,
+    appVersion: 27,
     updatedAt: new Date().toISOString(),
     data
   };
 }
 
-function applyDrivePayload(payload){
-  const local=data || {};
+function buildMergedData(payload, localSnapshot){
+  const local=JSON.parse(JSON.stringify(localSnapshot || data || {}));
 
-  // Normal current format: {data:{...}}
-  // Legacy format: {recipes:[...], records:[...], ...}
-  // Corrupted intermediate format: wrapper exists but `data` is missing.
   let remote=null;
   if(payload && typeof payload==="object"){
-    if(payload.data && typeof payload.data==="object"){
-      remote=payload.data;
-    }else if(Array.isArray(payload.recipes) || Array.isArray(payload.records)){
-      remote=payload;
-    }
+    if(payload.data && typeof payload.data==="object") remote=payload.data;
+    else if(Array.isArray(payload.recipes) || Array.isArray(payload.records)) remote=payload;
   }
 
-  // If Drive content is corrupted/empty, preserve recovered local data.
-  if(!remote){
-    data=local;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    if(typeof renderAll==="function") renderAll();
-    return data;
-  }
+  if(!remote) return local;
 
-  const merged={
+  return {
     ...remote,
     ...local,
     machine: remote.machine || local.machine,
@@ -1392,11 +1407,14 @@ function applyDrivePayload(payload){
     records: mergeRecordsByFreshness(remote.records||[], local.records||[]),
     settings: {...(remote.settings||{}), ...(local.settings||{})}
   };
+}
 
+function applyDrivePayload(payload, localSnapshot){
+  const merged=buildMergedData(payload, localSnapshot);
   data=merged;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   if(typeof renderAll==="function") renderAll();
-  return data;
+  return merged;
 }
 
 
@@ -1409,35 +1427,35 @@ function isValidDrivePayload(payload){
 }
 
 async function connectDriveAfterToken(){
-  const existing = await findDriveDataFile();
-  // v0.26: run legacy localStorage recovery only once on this device.
-  // Re-running it on every connection can reintroduce stale historical copies.
-  const recoveryKey="breadLogLegacyRecovery_v26";
-  if(!localStorage.getItem(recoveryKey)){
-    data=recoverAllLocalData(data);
-    localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
-    localStorage.setItem(recoveryKey,"1");
-  }
+  const localSnapshot=JSON.parse(JSON.stringify(data || {}));
+  const existing=await findDriveDataFile();
 
   if(existing){
-    driveFileId = existing.id;
-    const remote = await readDriveData(existing.id);
-    const remoteWasValid=isValidDrivePayload(remote);
-    applyDrivePayload(remote);
-    // Always normalize Drive to current format. If it was corrupted, recovered local data repairs it.
+    driveFileId=existing.id;
+    const remote=await readDriveData(existing.id);
+
+    const merged=isValidDrivePayload(remote)
+      ? buildMergedData(remote, localSnapshot)
+      : localSnapshot;
+
+    data=merged;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if(typeof renderAll==="function") renderAll();
+
+    // Normalize/repair Drive with exactly what is now shown.
     await updateDriveDataFile(existing.id, makeDrivePayload());
-    if(!remoteWasValid){
-      console.warn("Drive data was invalid and has been repaired from local recovered data.");
-    }
   }else{
-    const created = await createDriveDataFile(makeDrivePayload());
-    driveFileId = created.id;
+    data=localSnapshot;
+    const created=await createDriveDataFile(makeDrivePayload());
+    driveFileId=created.id;
   }
 
   driveConnected=true;
   driveSyncing=false;
   setDriveMeta({fileId:driveFileId, connected:true, lastSync:new Date().toISOString()});
-  updateDriveUI("Drive読込済み："+dataSummary(data)+"／最終同期 "+new Date().toLocaleString("ja-JP"));
+  updateDriveUI(
+    `Drive読込済み：カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件 / 最終同期 ${new Date().toLocaleString("ja-JP")}`
+  );
 }
 
 async function syncNow(){
@@ -1447,24 +1465,33 @@ async function syncNow(){
   }
 
   driveSyncing=true;
-  updateDriveUI("Google Driveと双方向同期しています。");
+  updateDriveUI("Google Driveと同期しています。");
+
+  // Critical: freeze the current device state before any Drive read.
+  const localSnapshot=JSON.parse(JSON.stringify(data || {}));
 
   try{
-    const existing = await findDriveDataFile();
+    const existing=await findDriveDataFile();
 
     if(!existing){
-      const created = await createDriveDataFile(makeDrivePayload());
-      driveFileId = created.id;
+      data=localSnapshot;
+      const created=await createDriveDataFile(makeDrivePayload());
+      driveFileId=created.id;
     }else{
-      driveFileId = existing.id;
+      driveFileId=existing.id;
+      const remote=await readDriveData(existing.id);
 
-      // 1) Driveの最新データを取得
-      const remote = await readDriveData(existing.id);
+      // Invalid/corrupt Drive content: keep local snapshot and repair Drive.
+      const merged=isValidDrivePayload(remote)
+        ? buildMergedData(remote, localSnapshot)
+        : localSnapshot;
 
-      // 2) Driveとこの端末をID単位でマージ
-      applyDrivePayload(remote);
+      // Only now commit merged data to the UI/local cache.
+      data=merged;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      if(typeof renderAll==="function") renderAll();
 
-      // 3) マージ結果をDriveへ保存
+      // Then persist the same merged state to Drive.
       await updateDriveDataFile(existing.id, makeDrivePayload());
     }
 
@@ -1476,12 +1503,18 @@ async function syncNow(){
 
     driveSyncing=false;
     updateDriveUI(
-      `双方向同期完了：カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件 / ${new Date().toLocaleString("ja-JP")}`
+      `同期完了：カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件 / ${new Date().toLocaleString("ja-JP")}`
     );
   }catch(e){
     console.error(e);
+
+    // Never roll the screen back when sync fails.
+    data=localSnapshot;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if(typeof renderAll==="function") renderAll();
+
     driveSyncing=false;
-    updateDriveUI("同期に失敗しました: "+(e.message||e)+"。端末内データは保持されています。");
+    updateDriveUI("同期に失敗しました。端末側の変更は保持されています。");
   }
 }
 

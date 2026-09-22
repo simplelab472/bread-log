@@ -268,3 +268,15 @@ https://www.googleapis.com/auth/drive.appdata
 - 旧版データの全走査は端末ごとに一度だけ
 - Drive状態表示に「評価済み ○件」を追加
 - Service Worker / app.js を v26 で強制更新
+
+
+## v0.27 同期ロジック再構築
+- 同期開始時に端末の現在データをスナップショットとして固定
+- Drive読込後にその場で画面を上書きせず、まずメモリ上でマージ
+- 同じ履歴IDでは updatedAt が新しい方を優先
+- updatedAt が同じ場合は評価・コメント等の情報量が多い方を優先
+- 同期失敗時は端末画面をDriveの古い値へ巻き戻さない
+- Drive JSONが壊れている場合は端末データでDriveを修復
+- 接続時も同じ安全なマージロジックを使用
+- 評価保存時に updatedAt を確実に更新
+- Service Worker / app.js を v27 で強制更新
