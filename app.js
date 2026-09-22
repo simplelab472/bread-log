@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v22";
+const STORAGE_KEY = "breadLogIBM010C_v23";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -229,7 +229,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=22;
+    existing.version=23;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -1320,17 +1320,27 @@ function makeDrivePayload(){
 }
 
 function applyDrivePayload(payload){
-  if(!payload || typeof payload!=="object") throw new Error("Driveデータ形式が不正です");
-
-  // v17以降の正規形式: { schemaVersion, appVersion, updatedAt, data:{...} }
-  // 旧版/途中版の互換形式: { recipes, records, machine, settings, ... }
-  const remote = payload.data && typeof payload.data==="object"
-    ? payload.data
-    : (Array.isArray(payload.recipes) || Array.isArray(payload.records) ? payload : null);
-
-  if(!remote) throw new Error("Driveデータ形式が不正です");
-
   const local=data || {};
+
+  // Normal current format: {data:{...}}
+  // Legacy format: {recipes:[...], records:[...], ...}
+  // Corrupted intermediate format: wrapper exists but `data` is missing.
+  let remote=null;
+  if(payload && typeof payload==="object"){
+    if(payload.data && typeof payload.data==="object"){
+      remote=payload.data;
+    }else if(Array.isArray(payload.recipes) || Array.isArray(payload.records)){
+      remote=payload;
+    }
+  }
+
+  // If Drive content is corrupted/empty, preserve recovered local data.
+  if(!remote){
+    data=local;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if(typeof renderAll==="function") renderAll();
+    return data;
+  }
 
   const merged={
     ...remote,
@@ -1344,6 +1354,15 @@ function applyDrivePayload(payload){
   data=merged;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   if(typeof renderAll==="function") renderAll();
+  return data;
+}
+
+
+function isValidDrivePayload(payload){
+  if(!payload || typeof payload!=="object") return false;
+  if(payload.data && typeof payload.data==="object") return true;
+  if(Array.isArray(payload.recipes) || Array.isArray(payload.records)) return true;
+  return false;
 }
 
 async function connectDriveAfterToken(){
@@ -1355,9 +1374,13 @@ async function connectDriveAfterToken(){
   if(existing){
     driveFileId = existing.id;
     const remote = await readDriveData(existing.id);
-    data=applyDrivePayload(remote);
-    // Write the merged/recovered result back to Drive so Drive becomes the complete master.
+    const remoteWasValid=isValidDrivePayload(remote);
+    applyDrivePayload(remote);
+    // Always normalize Drive to current format. If it was corrupted, recovered local data repairs it.
     await updateDriveDataFile(existing.id, makeDrivePayload());
+    if(!remoteWasValid){
+      console.warn("Drive data was invalid and has been repaired from local recovered data.");
+    }
   }else{
     const created = await createDriveDataFile(makeDrivePayload());
     driveFileId = created.id;

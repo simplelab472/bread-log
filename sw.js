@@ -1,4 +1,4 @@
-const CACHE_NAME = "bread-log-pwa-v1";
+const CACHE_NAME = "bread-log-pwa-v23";
 const APP_SHELL = [
   "./",
   "./index.html",

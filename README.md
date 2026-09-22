@@ -230,3 +230,11 @@ https://www.googleapis.com/auth/drive.appdata
 - BOM付きJSONも読込可能
 - 読込後は現行形式でDriveへ保存し直すため、以後の形式を統一
 - エラー時も端末内データは保持
+
+
+## v0.23 Drive破損データ修復
+- v0.22の `data=applyDrivePayload(...)` による代入不具合を修正
+- applyDrivePayload は必ず現在データを保持し、戻り値も返す
+- Drive上のJSONが壊れていても、端末内の復旧データを優先してDriveを再構築
+- 接続時にDriveデータを現行 `{data:{...}}` 形式へ自動修復
+- Service Workerキャッシュを v23 に更新し、古いapp.jsが残る問題を回避
