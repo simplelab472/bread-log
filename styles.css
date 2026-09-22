@@ -157,3 +157,7 @@ dialog{border:0;padding:0;border-radius:22px;background:transparent;width:min(72
   .step-number{width:34px;height:36px;font-size:.9rem}
   .step-remove{height:36px}
 }
+
+#settingsDialog .settings-section{margin:16px 0;padding:14px;border-radius:14px;background:#f8f1e7}
+#settingsDialog .settings-section h3{margin:0 0 8px}
+#settingsDialog .settings-section button{margin-top:8px;width:100%}
