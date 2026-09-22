@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v30";
+const STORAGE_KEY = "breadLogIBM010C_v31";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -262,7 +262,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=30;
+    existing.version=31;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -660,6 +660,7 @@ function openRecipeForm(recipe=null,copy=false){
   document.getElementById("recipeIngredients").value=(r.ingredients||[]).map(x=>x.join(" | ")).join("\n");
   renderIngredientEditor("recipeIngredients","recipeIngredientRows",document.getElementById("recipeIngredients").value);
   document.getElementById("recipeSteps").value=(r.steps||[]).join("\n");
+  renderStepEditor("recipeSteps","recipeStepRows",document.getElementById("recipeSteps").value);
   document.getElementById("recipeNotes").value=copy?`コピー元: ${r.name||""} ${r.version||""}\n${r.notes||""}`:(r.notes||"");
   document.getElementById("recipeFavorite").checked=copy?false:!!r.favorite;
   document.getElementById("recipeDialog").dataset.parentId=copy?r.id:(r.parentRecipeId||"");
@@ -822,13 +823,14 @@ function loadBakeTemplate(id){
   document.getElementById("workingIngredients").value=formatIngredients(r.ingredients||[]);
   renderIngredientEditor("workingIngredients","workingIngredientRows",document.getElementById("workingIngredients").value);
   document.getElementById("workingSteps").value=(r.steps||[]).join("\n");
+  renderStepEditor("workingSteps","workingStepRows",document.getElementById("workingSteps").value);
   document.getElementById("workingNotes").value="";
   document.getElementById("bakeEditorWrap").classList.remove("hidden");
   renderWorkingDiff();
   document.getElementById("bakeEditorWrap").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
-["workingSteps","workingMenuNo","workingMenuName","workingName","workingItem"].forEach(id=>{
+["workingMenuNo","workingMenuName","workingName","workingItem"].forEach(id=>{
   const el=document.getElementById(id);
   if(el) el.addEventListener("input",renderWorkingDiff);
 });
@@ -837,6 +839,7 @@ document.getElementById("cancelWorkingBake").onclick=()=>{
   document.getElementById("bakeEditorWrap").classList.add("hidden");
 };
 document.getElementById("startWorkingBake").onclick=()=>{
+  syncStepEditor("workingSteps","workingStepRows");
   syncIngredientEditor("workingIngredients","workingIngredientRows");
   try{
     const sourceId=document.getElementById("workingSourceRecipeId").value;
@@ -1184,6 +1187,83 @@ function addIngredientEditorRow(textareaId,rowsId){
   if(!host) return;
   host.appendChild(makeIngredientEditorRow(textareaId,rowsId,{name:"",qty:"",unit:"g"}));
   syncIngredientEditor(textareaId,rowsId);
+}
+
+
+function stepNumberLabel(index){
+  const circled=["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩","⑪","⑫","⑬","⑭","⑮","⑯","⑰","⑱","⑲","⑳"];
+  return circled[index] || String(index+1);
+}
+
+function parseStepsText(text){
+  return String(text||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+}
+
+function stepRowsToText(rowsId){
+  return [...document.querySelectorAll(`#${rowsId} .step-row textarea`)]
+    .map(el=>el.value.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function renumberStepRows(rowsId){
+  [...document.querySelectorAll(`#${rowsId} .step-row`)].forEach((row,i)=>{
+    const badge=row.querySelector(".step-number");
+    if(badge) badge.textContent=stepNumberLabel(i);
+  });
+}
+
+function syncStepEditor(textareaId, rowsId){
+  const ta=document.getElementById(textareaId);
+  if(ta) ta.value=stepRowsToText(rowsId);
+  renumberStepRows(rowsId);
+  if(textareaId==="workingSteps" && typeof renderWorkingDiff==="function") renderWorkingDiff();
+}
+
+function makeStepEditorRow(textareaId, rowsId, text=""){
+  const row=document.createElement("div");
+  row.className="step-row";
+
+  const num=document.createElement("div");
+  num.className="step-number";
+
+  const area=document.createElement("textarea");
+  area.placeholder="作り方を入力";
+  area.value=text||"";
+  area.addEventListener("input",()=>syncStepEditor(textareaId,rowsId));
+
+  const remove=document.createElement("button");
+  remove.type="button";
+  remove.textContent="×";
+  remove.className="secondary step-remove";
+  remove.title="このステップを削除";
+  remove.addEventListener("click",()=>{
+    row.remove();
+    syncStepEditor(textareaId,rowsId);
+  });
+
+  row.append(num,area,remove);
+  return row;
+}
+
+function renderStepEditor(textareaId, rowsId, text){
+  const host=document.getElementById(rowsId);
+  if(!host) return;
+  host.innerHTML="";
+  const steps=parseStepsText(text);
+  (steps.length?steps:[""]).forEach(step=>{
+    host.appendChild(makeStepEditorRow(textareaId,rowsId,step));
+  });
+  syncStepEditor(textareaId,rowsId);
+}
+
+function addStepEditorRow(textareaId,rowsId){
+  const host=document.getElementById(rowsId);
+  if(!host) return;
+  host.appendChild(makeStepEditorRow(textareaId,rowsId,""));
+  syncStepEditor(textareaId,rowsId);
+  const last=host.lastElementChild?.querySelector("textarea");
+  last?.focus();
 }
 
 function toast(msg){
@@ -1540,7 +1620,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 30,
+    appVersion: 31,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1756,4 +1836,19 @@ document.addEventListener("DOMContentLoaded",()=>{
 
   const workingTa=document.getElementById("workingIngredients");
   if(workingTa) renderIngredientEditor("workingIngredients","workingIngredientRows",workingTa.value);
+});
+
+document.addEventListener("DOMContentLoaded",()=>{
+  document.getElementById("addRecipeStepRowBtn")?.addEventListener("click",()=>{
+    addStepEditorRow("recipeSteps","recipeStepRows");
+  });
+  document.getElementById("addWorkingStepRowBtn")?.addEventListener("click",()=>{
+    addStepEditorRow("workingSteps","workingStepRows");
+  });
+
+  const recipeTa=document.getElementById("recipeSteps");
+  if(recipeTa) renderStepEditor("recipeSteps","recipeStepRows",recipeTa.value);
+
+  const workingTa=document.getElementById("workingSteps");
+  if(workingTa) renderStepEditor("workingSteps","workingStepRows",workingTa.value);
 });
