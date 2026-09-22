@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v32";
+const STORAGE_KEY = "breadLogIBM010C_v31";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -262,7 +262,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=32;
+    existing.version=31;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -1620,7 +1620,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 32,
+    appVersion: 31,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1806,120 +1806,6 @@ window.addEventListener("load", ()=>{
     setTimeout(()=>initDriveClient(),300);
     updateDriveUI("初回接続時に、この端末の現在データをGoogle Driveへ移行します。");
   }
-});
-
-
-
-function parseCsvText(text){
-  const rows=[]; let row=[], field="", quoted=false;
-  const s=String(text||"").replace(/^\uFEFF/,"");
-  for(let i=0;i<s.length;i++){
-    const ch=s[i];
-    if(quoted){
-      if(ch==='"' && s[i+1]==='"'){ field+='"'; i++; }
-      else if(ch==='"') quoted=false;
-      else field+=ch;
-    }else{
-      if(ch==='"') quoted=true;
-      else if(ch===','){ row.push(field); field=""; }
-      else if(ch==='\n'){ row.push(field); field=""; if(row.some(v=>v.trim()!=="")) rows.push(row); row=[]; }
-      else if(ch!=='\r') field+=ch;
-    }
-  }
-  row.push(field);
-  if(row.some(v=>v.trim()!=="")) rows.push(row);
-  return rows;
-}
-function normCsvHeader(h){ return String(h||"").trim().toLowerCase().replace(/\s+/g,""); }
-function csvIngredientsToInternal(v){
-  return String(v||"").split(";;").map(s=>s.trim()).filter(Boolean).map(s=>{
-    const p=s.split("|").map(x=>x.trim());
-    return `${p[0]||""} | ${p[1]||""} | ${p[2]||""}`;
-  }).join("\n");
-}
-function csvStepsToInternal(v){
-  return String(v||"").split(";;").map(s=>s.trim()).filter(Boolean).join("\n");
-}
-function importRecipeCsvText(text){
-  const rows=parseCsvText(text);
-  if(rows.length<2) throw new Error("CSVにデータ行がありません。");
-  const headers=rows[0].map(normCsvHeader);
-  const required=["name","item","version","menuno","menuname","ingredients","steps","notes"];
-  const missing=required.filter(h=>!headers.includes(h));
-  if(missing.length) throw new Error("必要な列がありません: "+missing.join(", "));
-  const idx=Object.fromEntries(headers.map((h,i)=>[h,i]));
-  let added=0, skipped=0;
-  rows.slice(1).forEach(r=>{
-    const name=String(r[idx.name]||"").trim();
-    const item=String(r[idx.item]||name).trim();
-    if(!name){ skipped++; return; }
-    data.recipes.unshift({
-      id:"r_csv_"+Date.now()+"_"+Math.random().toString(36).slice(2,8),
-      name,item,type:"custom",
-      recipeVersion:String(r[idx.version]||"Ver.1").trim()||"Ver.1",
-      recipeVersionNote:"",
-      menuNo:String(r[idx.menuno]||"").trim(),
-      menuName:String(r[idx.menuname]||"").trim(),
-      ingredients:csvIngredientsToInternal(r[idx.ingredients]),
-      steps:csvStepsToInternal(r[idx.steps]),
-      notes:String(r[idx.notes]||"").trim(),
-      favorite:false,
-      createdAt:new Date().toISOString(),
-      updatedAt:new Date().toISOString()
-    });
-    added++;
-  });
-  save(); renderAll();
-  return {added,skipped};
-}
-const RECIPE_CSV_PROMPT = `パン作り記録アプリへインポートするCSVを作成してください。
-
-1行目のヘッダーは必ず次の8列です。
-name,item,version,menuNo,menuName,ingredients,steps,notes
-
-各列:
-- name: レシピ名
-- item: レシピの系列名
-- version: 例 Ver.1
-- menuNo: ホームベーカリーのメニュー番号
-- menuName: メニュー名
-- ingredients: 材料を「材料名|数量|単位」で書き、複数材料は ;; で区切る
-- steps: 1ステップずつ書き、複数ステップは ;; で区切る
-- notes: 補足
-
-重要:
-- 正しいCSVとして出力する
-- カンマ、改行、ダブルクォートを含むセルはCSVルールに従いダブルクォートで囲む
-- Markdown表ではなくCSV本文だけを出力する
-- コードブロックは使わない
-
-例:
-name,item,version,menuNo,menuName,ingredients,steps,notes
-りんごパン,りんごパン,Ver.1,13,スイートパン,"強力粉|250|g;;砂糖|40|g;;りんご|120|g","りんごを加熱して冷ます;;材料を入れる;;メニュー13で開始","りんごは十分に冷ます"
-
-この仕様で、私がこの後に示すレシピ情報をCSVに変換してください。`;
-
-document.addEventListener("DOMContentLoaded",()=>{
-  const importBtn=document.getElementById("importRecipeCsvBtn");
-  const fileInput=document.getElementById("recipeCsvFile");
-  const promptBtn=document.getElementById("copyRecipeCsvPromptBtn");
-  importBtn?.addEventListener("click",()=>fileInput?.click());
-  fileInput?.addEventListener("change",async()=>{
-    const file=fileInput.files?.[0]; if(!file) return;
-    try{
-      const result=importRecipeCsvText(await file.text());
-      toast(`レシピを${result.added}件追加しました`+(result.skipped?`（${result.skipped}件スキップ）`:""));
-    }catch(e){ alert("CSVの読み込みに失敗しました。\n"+(e?.message||e)); }
-    fileInput.value="";
-  });
-  promptBtn?.addEventListener("click",async()=>{
-    try{ await navigator.clipboard.writeText(RECIPE_CSV_PROMPT); }
-    catch(e){
-      const ta=document.createElement("textarea"); ta.value=RECIPE_CSV_PROMPT;
-      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
-    }
-    toast("CSV作成用プロンプトをコピーしました");
-  });
 });
 
 
