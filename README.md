@@ -238,3 +238,12 @@ https://www.googleapis.com/auth/drive.appdata
 - Drive上のJSONが壊れていても、端末内の復旧データを優先してDriveを再構築
 - 接続時にDriveデータを現行 `{data:{...}}` 形式へ自動修復
 - Service Workerキャッシュを v23 に更新し、古いapp.jsが残る問題を回避
+
+
+## v0.24 強制更新・Drive修復
+- 画面に「アプリ版 v0.24」を表示し、実際に動いている版を確認可能
+- app.js / styles.css に `?v=24` を付与してGitHub Pages・ブラウザキャッシュを回避
+- 初回だけ旧 bread-log Service Worker / Cache Storage を削除し、最新版へ強制更新
+- localStorage は削除しないため、既存レシピ・履歴の復旧データは保持
+- Drive上のJSONが空/壊れていてもエラー停止せず、端末内復旧データからDriveを再構築
+- Drive保存形式を appVersion 24 に統一

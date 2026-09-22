@@ -7,11 +7,38 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="パン作り記録" />
-  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="manifest" href="manifest.webmanifest?v=24" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>パン作り記録 - IBM-010-C</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=24" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<script>
+(function(){
+  const resetKey="breadLogCacheReset_v24";
+  if(!localStorage.getItem(resetKey)){
+    localStorage.setItem(resetKey,"1");
+    if("caches" in window){
+      caches.keys().then(keys=>Promise.all(
+        keys.filter(k=>k.startsWith("bread-log-pwa-")).map(k=>caches.delete(k))
+      )).catch(()=>{});
+    }
+    if("serviceWorker" in navigator){
+      navigator.serviceWorker.getRegistrations().then(regs=>{
+        return Promise.all(regs.map(r=>r.unregister()));
+      }).then(()=>{
+        // Reload once with a query parameter so GitHub/CDN/browser cannot reuse old index/app.
+        const u=new URL(location.href);
+        if(u.searchParams.get("v")!=="24"){
+          u.searchParams.set("v","24");
+          location.replace(u.toString());
+        }
+      }).catch(()=>{});
+    }
+  }
+})();
+</script>
+
 </head>
 <body>
   <header class="topbar">
@@ -144,6 +171,7 @@
     <button type="button" id="driveSyncBtn" class="secondary" hidden>今すぐ同期</button>
     <button type="button" id="driveDisconnectBtn" class="secondary" hidden>接続解除</button>
   </div>
+  <div class="small-note" id="appVersionLabel">アプリ版 v0.24</div>
   <div class="small-note" id="driveDetailText">初回接続時に、この端末の現在データをGoogle Driveへ移行できます。</div>
 </section>
 
@@ -282,6 +310,6 @@
   </dialog>
 
   <div id="toast" class="toast"></div>
-  <script src="app.js"></script>
+  <script src="app.js?v=24"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v23";
+const STORAGE_KEY = "breadLogIBM010C_v24";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -229,7 +229,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=23;
+    existing.version=24;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -1276,11 +1276,16 @@ async function readDriveData(fileId){
   const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
   if(!res.ok) throw new Error("Driveデータ読込エラー "+res.status);
   const text=(await res.text()).replace(/^\uFEFF/,"").trim();
-  if(!text) throw new Error("Driveデータが空です");
+
+  // Empty / malformed JSON can occur after an interrupted older-version write.
+  // Do not abort here: return an invalid marker so connectDriveAfterToken()
+  // can rebuild Drive from the recovered local cache.
+  if(!text) return {__invalidDriveData:true, reason:"empty"};
   try{
     return JSON.parse(text);
   }catch(e){
-    throw new Error("Drive JSONの解析に失敗しました");
+    console.warn("Drive JSON is malformed; repairing from local cache.");
+    return {__invalidDriveData:true, reason:"json-parse"};
   }
 }
 
@@ -1313,7 +1318,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 20,
+    appVersion: 24,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1359,6 +1364,7 @@ function applyDrivePayload(payload){
 
 
 function isValidDrivePayload(payload){
+  if(payload?.__invalidDriveData) return false;
   if(!payload || typeof payload!=="object") return false;
   if(payload.data && typeof payload.data==="object") return true;
   if(Array.isArray(payload.recipes) || Array.isArray(payload.records)) return true;
