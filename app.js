@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v29";
+const STORAGE_KEY = "breadLogIBM010C_v30";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -262,7 +262,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=29;
+    existing.version=30;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -658,6 +658,7 @@ function openRecipeForm(recipe=null,copy=false){
   document.getElementById("recipeMenuNo").value=r.menuNo||"";
   document.getElementById("recipeMenuName").value=r.menuName||"";
   document.getElementById("recipeIngredients").value=(r.ingredients||[]).map(x=>x.join(" | ")).join("\n");
+  renderIngredientEditor("recipeIngredients","recipeIngredientRows",document.getElementById("recipeIngredients").value);
   document.getElementById("recipeSteps").value=(r.steps||[]).join("\n");
   document.getElementById("recipeNotes").value=copy?`コピー元: ${r.name||""} ${r.version||""}\n${r.notes||""}`:(r.notes||"");
   document.getElementById("recipeFavorite").checked=copy?false:!!r.favorite;
@@ -819,6 +820,7 @@ function loadBakeTemplate(id){
   document.getElementById("workingMenuNo").value=r.menuNo||"";
   document.getElementById("workingMenuName").value=r.menuName||"";
   document.getElementById("workingIngredients").value=formatIngredients(r.ingredients||[]);
+  renderIngredientEditor("workingIngredients","workingIngredientRows",document.getElementById("workingIngredients").value);
   document.getElementById("workingSteps").value=(r.steps||[]).join("\n");
   document.getElementById("workingNotes").value="";
   document.getElementById("bakeEditorWrap").classList.remove("hidden");
@@ -826,7 +828,7 @@ function loadBakeTemplate(id){
   document.getElementById("bakeEditorWrap").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
-["workingIngredients","workingSteps","workingMenuNo","workingMenuName","workingName","workingItem"].forEach(id=>{
+["workingSteps","workingMenuNo","workingMenuName","workingName","workingItem"].forEach(id=>{
   const el=document.getElementById(id);
   if(el) el.addEventListener("input",renderWorkingDiff);
 });
@@ -835,6 +837,7 @@ document.getElementById("cancelWorkingBake").onclick=()=>{
   document.getElementById("bakeEditorWrap").classList.add("hidden");
 };
 document.getElementById("startWorkingBake").onclick=()=>{
+  syncIngredientEditor("workingIngredients","workingIngredientRows");
   try{
     const sourceId=document.getElementById("workingSourceRecipeId").value;
     const source=recipeById(sourceId);
@@ -1051,6 +1054,137 @@ function copyText(txt){ navigator.clipboard?.writeText(txt).then(()=>toast("コ�
 
 document.getElementById("toggleBreakdown").onclick=()=>document.getElementById("breakdown").classList.toggle("hidden");
 ["recipeSearch","recipeClassFilter","recipeTypeFilter","favoritesOnly"].forEach(id=>document.getElementById(id).addEventListener(id==="recipeSearch"?"input":"change",renderRecipes));
+
+
+const INGREDIENT_UNITS=["g","ml","cc","個","本","枚","袋","缶","大さじ","小さじ","適量","少々","その他"];
+
+function parseIngredientLinesForEditor(text){
+  return String(text||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(line=>{
+    const parts=line.split("|").map(s=>s.trim());
+    return {name:parts[0]||"", qty:parts[1]||"", unit:parts[2]||"g"};
+  });
+}
+
+function editorRowsToText(rowsId){
+  return [...document.querySelectorAll(`#${rowsId} .ingredient-row`)].map(row=>{
+    const name=row.querySelector(".ingredient-name")?.value.trim()||"";
+    const qty=row.querySelector(".ingredient-qty")?.value.trim()||"";
+    const select=row.querySelector(".ingredient-unit");
+    let unit=select?.value||"g";
+    if(unit==="その他") unit=row.querySelector(".ingredient-unit-custom")?.value.trim()||"";
+    return name ? `${name} | ${qty} | ${unit}` : "";
+  }).filter(Boolean).join("\n");
+}
+
+function syncIngredientEditor(textareaId, rowsId){
+  const ta=document.getElementById(textareaId);
+  if(ta) ta.value=editorRowsToText(rowsId);
+  if(textareaId==="workingIngredients" && typeof renderWorkingDiff==="function") renderWorkingDiff();
+}
+
+function makeIngredientEditorRow(textareaId, rowsId, item={name:"",qty:"",unit:"g"}){
+  const row=document.createElement("div");
+  row.className="ingredient-row";
+
+  const name=document.createElement("input");
+  name.type="text";
+  name.className="ingredient-name";
+  name.placeholder="材料名";
+  name.value=item.name||"";
+
+  const qtyWrap=document.createElement("div");
+  qtyWrap.className="qty-control";
+
+  const minus=document.createElement("button");
+  minus.type="button";
+  minus.textContent="−";
+  minus.className="secondary";
+  minus.setAttribute("aria-label","数量を減らす");
+
+  const qty=document.createElement("input");
+  qty.type="number";
+  qty.inputMode="decimal";
+  qty.step="0.1";
+  qty.className="ingredient-qty";
+  qty.placeholder="数量";
+  qty.value=item.qty||"";
+
+  const plus=document.createElement("button");
+  plus.type="button";
+  plus.textContent="+";
+  plus.className="secondary";
+  plus.setAttribute("aria-label","数量を増やす");
+
+  qtyWrap.append(minus,qty,plus);
+
+  const unitWrap=document.createElement("div");
+  const unit=document.createElement("select");
+  unit.className="ingredient-unit";
+  INGREDIENT_UNITS.forEach(u=>{
+    const opt=document.createElement("option");
+    opt.value=u; opt.textContent=u;
+    unit.appendChild(opt);
+  });
+
+  const known=INGREDIENT_UNITS.includes(item.unit);
+  unit.value=known ? (item.unit||"g") : "その他";
+
+  const custom=document.createElement("input");
+  custom.type="text";
+  custom.className="ingredient-unit-custom";
+  custom.placeholder="単位";
+  custom.value=known ? "" : (item.unit||"");
+  custom.hidden=unit.value!=="その他";
+  unitWrap.append(unit,custom);
+
+  const remove=document.createElement("button");
+  remove.type="button";
+  remove.textContent="×";
+  remove.className="secondary ingredient-remove";
+  remove.title="この材料を削除";
+
+  const adjust=(dir)=>{
+    const current=parseFloat(qty.value||"0")||0;
+    // 1g単位が中心だが、1未満では0.1刻み
+    const step=Math.abs(current)<1 ? 0.1 : 1;
+    const next=Math.max(0,current+(dir*step));
+    qty.value=Number.isInteger(next)?String(next):String(Math.round(next*10)/10);
+    syncIngredientEditor(textareaId,rowsId);
+  };
+
+  minus.addEventListener("click",()=>adjust(-1));
+  plus.addEventListener("click",()=>adjust(1));
+  [name,qty,custom].forEach(el=>el.addEventListener("input",()=>syncIngredientEditor(textareaId,rowsId)));
+  unit.addEventListener("change",()=>{
+    custom.hidden=unit.value!=="その他";
+    syncIngredientEditor(textareaId,rowsId);
+  });
+  remove.addEventListener("click",()=>{
+    row.remove();
+    syncIngredientEditor(textareaId,rowsId);
+  });
+
+  row.append(name,qtyWrap,unitWrap,remove);
+  return row;
+}
+
+function renderIngredientEditor(textareaId, rowsId, text){
+  const host=document.getElementById(rowsId);
+  if(!host) return;
+  host.innerHTML="";
+  const items=parseIngredientLinesForEditor(text);
+  (items.length?items:[{name:"",qty:"",unit:"g"}]).forEach(item=>{
+    host.appendChild(makeIngredientEditorRow(textareaId,rowsId,item));
+  });
+  syncIngredientEditor(textareaId,rowsId);
+}
+
+function addIngredientEditorRow(textareaId,rowsId){
+  const host=document.getElementById(rowsId);
+  if(!host) return;
+  host.appendChild(makeIngredientEditorRow(textareaId,rowsId,{name:"",qty:"",unit:"g"}));
+  syncIngredientEditor(textareaId,rowsId);
+}
 
 function toast(msg){
   const t=document.getElementById("toast"); t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800);
@@ -1406,7 +1540,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 29,
+    appVersion: 30,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1608,3 +1742,18 @@ function countEvaluatedRecords(){
   return (data?.records||[]).filter(r=>r.rating || r.comment || r.next || r.photo).length;
 }
 
+
+document.addEventListener("DOMContentLoaded",()=>{
+  document.getElementById("addRecipeIngredientRowBtn")?.addEventListener("click",()=>{
+    addIngredientEditorRow("recipeIngredients","recipeIngredientRows");
+  });
+  document.getElementById("addWorkingIngredientRowBtn")?.addEventListener("click",()=>{
+    addIngredientEditorRow("workingIngredients","workingIngredientRows");
+  });
+
+  const recipeTa=document.getElementById("recipeIngredients");
+  if(recipeTa) renderIngredientEditor("recipeIngredients","recipeIngredientRows",recipeTa.value);
+
+  const workingTa=document.getElementById("workingIngredients");
+  if(workingTa) renderIngredientEditor("workingIngredients","workingIngredientRows",workingTa.value);
+});
