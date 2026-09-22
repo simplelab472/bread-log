@@ -247,3 +247,13 @@ https://www.googleapis.com/auth/drive.appdata
 - localStorage は削除しないため、既存レシピ・履歴の復旧データは保持
 - Drive上のJSONが空/壊れていてもエラー停止せず、端末内復旧データからDriveを再構築
 - Drive保存形式を appVersion 24 に統一
+
+
+## v0.25 双方向同期
+- 「今すぐ同期」を「Driveと同期」に変更
+- 手動同期は Drive → 端末マージ → Drive保存 の双方向処理
+- PC側の古い端末データだけでDriveを上書きしない
+- 履歴は同じIDなら updatedAt が新しい方を優先
+- 自動保存時の queueDriveSave も同じ双方向同期処理を使用
+- 画面に同期方向を明記
+- Service Worker / app.js を v25 で強制更新

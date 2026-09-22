@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v24";
+const STORAGE_KEY = "breadLogIBM010C_v25";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -88,6 +88,7 @@ const menuCatalog = [
 
 
 function nowIso(){ return new Date().toISOString(); }
+function touchRecord(rec){ if(rec) rec.updatedAt=nowIso(); }
 function recordUpdatedAt(rec){
   return rec?.updatedAt || rec?.completedAt || rec?.date || "";
 }
@@ -226,10 +227,11 @@ existing.records=existing.records.map(rec=>{
       }
       if(!rec.status) rec.status="completed";
     rec.updatedAt = nowIso();
+    rec.updatedAt = nowIso();
       return rec;
     });
 
-    existing.version=24;
+    existing.version=25;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -886,6 +888,7 @@ document.getElementById("bakeForm").addEventListener("submit",async e=>{
   rec.photo=newPhoto;
   rec.status="completed";
     rec.updatedAt = nowIso();
+    rec.updatedAt = nowIso();
   rec.completedAt=new Date().toISOString();
   document.getElementById("bakeDialog").close();
   save();
@@ -1318,7 +1321,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 24,
+    appVersion: 25,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1399,20 +1402,47 @@ async function connectDriveAfterToken(){
 }
 
 async function syncNow(){
-  if(!driveConnected || !driveAccessToken || !driveFileId){
+  if(!driveConnected || !driveAccessToken){
     requestDriveAccess(false);
     return;
   }
+
   driveSyncing=true;
-  updateDriveUI("Google Driveへ保存しています。");
+  updateDriveUI("Google Driveと双方向同期しています。");
+
   try{
-    await updateDriveDataFile(driveFileId, makeDrivePayload());
-    setDriveMeta({fileId:driveFileId, connected:true, lastSync:new Date().toISOString()});
+    const existing = await findDriveDataFile();
+
+    if(!existing){
+      const created = await createDriveDataFile(makeDrivePayload());
+      driveFileId = created.id;
+    }else{
+      driveFileId = existing.id;
+
+      // 1) Driveの最新データを取得
+      const remote = await readDriveData(existing.id);
+
+      // 2) Driveとこの端末をID単位でマージ
+      applyDrivePayload(remote);
+
+      // 3) マージ結果をDriveへ保存
+      await updateDriveDataFile(existing.id, makeDrivePayload());
+    }
+
+    setDriveMeta({
+      fileId:driveFileId,
+      connected:true,
+      lastSync:new Date().toISOString()
+    });
+
     driveSyncing=false;
-    updateDriveUI("Drive同期完了："+dataSummary(data)+"／"+new Date().toLocaleString("ja-JP"));
+    updateDriveUI(
+      `双方向同期完了：カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件 / ${new Date().toLocaleString("ja-JP")}`
+    );
   }catch(e){
+    console.error(e);
     driveSyncing=false;
-    updateDriveUI("同期に失敗しました: "+(e.message||e));
+    updateDriveUI("同期に失敗しました: "+(e.message||e)+"。端末内データは保持されています。");
   }
 }
 
