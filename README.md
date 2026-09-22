@@ -290,3 +290,12 @@ https://www.googleapis.com/auth/drive.appdata
 - 過去スナップショットはバックアップとして残る
 - Drive書込エラー時はHTTPステータスとGoogle APIの応答一部を画面表示
 - 端末側のデータは同期失敗でも保持
+
+
+## v0.29 同期結果表示修正
+- `countCustomRecipes is not defined` を修正
+- 同期成功判定を「Drive APIが新規ファイル作成を返した後」に変更
+- 成功後の表示処理でエラーになっても同期結果を誤判定しないよう整理
+- カスタムレシピ数 / 履歴数 / 評価済み件数の共通集計関数を追加
+- 同期失敗時は端末側の変更を保持
+- Service Worker / app.js を v29 に更新

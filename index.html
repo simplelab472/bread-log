@@ -7,15 +7,15 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="パン作り記録" />
-  <link rel="manifest" href="manifest.webmanifest?v=28" />
+  <link rel="manifest" href="manifest.webmanifest?v=29" />
   <link rel="apple-touch-icon" href="icon-192.png" />
   <title>パン作り記録 - IBM-010-C</title>
-  <link rel="stylesheet" href="styles.css?v=28" />
+  <link rel="stylesheet" href="styles.css?v=29" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <script>
 (function(){
-  const resetKey="breadLogCacheReset_v28";
+  const resetKey="breadLogCacheReset_v29";
   if(!localStorage.getItem(resetKey)){
     localStorage.setItem(resetKey,"1");
     if("caches" in window){
@@ -29,8 +29,8 @@
       }).then(()=>{
         // Reload once with a query parameter so GitHub/CDN/browser cannot reuse old index/app.
         const u=new URL(location.href);
-        if(u.searchParams.get("v")!=="28"){
-          u.searchParams.set("v","28");
+        if(u.searchParams.get("v")!=="29"){
+          u.searchParams.set("v","29");
           location.replace(u.toString());
         }
       }).catch(()=>{});
@@ -171,7 +171,7 @@
     <button type="button" id="driveSyncBtn" class="secondary" hidden>Driveと同期</button>
     <button type="button" id="driveDisconnectBtn" class="secondary" hidden>接続解除</button>
   </div>
-  <div class="small-note" id="appVersionLabel">アプリ版 v0.28</div>
+  <div class="small-note" id="appVersionLabel">アプリ版 v0.29</div>
   <div class="small-note">同期の動き：Driveの最新正常スナップショットを取得 → 端末データとマージ → 新しいスナップショットとして保存</div>
   <div class="small-note" id="driveDetailText">初回接続時に、この端末の現在データをGoogle Driveへ移行できます。</div>
 </section>
@@ -311,6 +311,6 @@
   </dialog>
 
   <div id="toast" class="toast"></div>
-  <script src="app.js?v=28"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v28";
+const STORAGE_KEY = "breadLogIBM010C_v29";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -262,7 +262,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=28;
+    existing.version=29;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -1208,6 +1208,17 @@ function mergeRecipesById(remoteRecipes=[], localRecipes=[]){
   return Array.from(map.values());
 }
 
+
+function countCustomRecipes(){
+  return (data?.recipes || []).filter(r => r?.type==="custom" || r?.type==="variant").length;
+}
+function countEvaluatedRecords(){
+  return (data?.records || []).filter(r => r?.rating || r?.comment || r?.next || r?.photo).length;
+}
+function currentDataSummary(){
+  return `カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件`;
+}
+
 // ==============================
 // Google Drive sync (v0.17)
 // Drive is the master after connection; localStorage remains a local cache.
@@ -1395,7 +1406,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 28,
+    appVersion: 29,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1460,8 +1471,7 @@ async function connectDriveAfterToken(){
   const latest=await loadLatestValidDriveSnapshot();
 
   if(latest.payload){
-    const merged=buildMergedData(latest.payload, localSnapshot);
-    data=merged;
+    data=buildMergedData(latest.payload, localSnapshot);
     driveFileId=latest.file.id;
   }else{
     data=localSnapshot;
@@ -1474,9 +1484,11 @@ async function connectDriveAfterToken(){
 
   driveConnected=true;
   driveSyncing=false;
-  setDriveMeta({fileId:driveFileId, connected:true, lastSync:new Date().toISOString()});
+
+  const syncedAt=new Date().toISOString();
+  setDriveMeta({fileId:driveFileId, connected:true, lastSync:syncedAt});
   updateDriveUI(
-    `Drive読込済み：カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件 / 最終同期 ${new Date().toLocaleString("ja-JP")}`
+    `Drive読込済み：${currentDataSummary()} / 最終同期 ${new Date(syncedAt).toLocaleString("ja-JP")}`
   );
 }
 
@@ -1497,33 +1509,37 @@ async function syncNow(){
       ? buildMergedData(latest.payload, localSnapshot)
       : localSnapshot;
 
+    // Keep the merged result locally first.
     data=merged;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     if(typeof renderAll==="function") renderAll();
 
-    // v0.28: do NOT PATCH an existing Drive file.
-    // Save a new immutable snapshot every time.
+    // Save a new immutable Drive snapshot.
     const created=await createDriveDataFile(makeDrivePayload());
     driveFileId=created.id;
 
+    // Only after Drive confirms creation do we mark the sync as successful.
+    const syncedAt=new Date().toISOString();
     setDriveMeta({
       fileId:driveFileId,
       connected:true,
-      lastSync:new Date().toISOString()
+      lastSync:syncedAt
     });
 
     driveSyncing=false;
     updateDriveUI(
-      `同期完了：Driveへ新規スナップショット保存 / カスタムレシピ ${countCustomRecipes()}件・履歴 ${data?.records?.length||0}件・評価済み ${countEvaluatedRecords()}件 / ${new Date().toLocaleString("ja-JP")}`
+      `同期完了：Driveへ保存済み / ${currentDataSummary()} / ${new Date(syncedAt).toLocaleString("ja-JP")}`
     );
   }catch(e){
-    console.error(e);
+    console.error("Drive sync failed:", e);
+
+    // Never roll back user edits.
     data=localSnapshot;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     if(typeof renderAll==="function") renderAll();
 
     driveSyncing=false;
-    updateDriveUI("同期に失敗しました："+(e.message||e)+"。端末側の変更は保持されています。");
+    updateDriveUI("同期に失敗しました："+(e?.message || String(e))+"。端末側の変更は保持されています。");
   }
 }
 
