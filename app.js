@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v20";
+const STORAGE_KEY = "breadLogIBM010C_v21";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -86,6 +86,11 @@ const menuCatalog = [
 [21,"ジャム"],[22,"あん"],[23,"甘酒"],[24,"もち"],[25,"こねる"],[26,"発酵"],[27,"焼き"]
 ];
 
+
+function nowIso(){ return new Date().toISOString(); }
+function recordUpdatedAt(rec){
+  return rec?.updatedAt || rec?.completedAt || rec?.date || "";
+}
 function uid(prefix="id"){ return prefix+"_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8); }
 
 function defaultData(){
@@ -220,10 +225,11 @@ existing.records=existing.records.map(rec=>{
         }
       }
       if(!rec.status) rec.status="completed";
+    rec.updatedAt = nowIso();
       return rec;
     });
 
-    existing.version=20;
+    existing.version=21;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -233,7 +239,13 @@ existing.records=existing.records.map(rec=>{
     return initial;
   }
 }
-function save(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+function save(){
+  if(Array.isArray(data?.records)){
+    data.records.forEach(r=>{
+      if(!r.updatedAt) r.updatedAt = r.completedAt || r.date || "";
+    });
+  }
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
   if(typeof queueDriveSave==="function") queueDriveSave(); renderAll(); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m])); }
 function recipeById(id){ return data.recipes.find(r=>r.id===id); }
@@ -674,6 +686,7 @@ window.startRecipeDirect=function(id){
     next:"",
     photo:"",
     status:"in_progress",
+      updatedAt: nowIso(),
     startedAt:new Date().toISOString(),
     workingRecipe:snapshotFromRecipe(source),
     sourceSnapshot:{
@@ -818,6 +831,7 @@ document.getElementById("startWorkingBake").onclick=()=>{
       next:"",
       photo:"",
       status:"in_progress",
+      updatedAt: nowIso(),
       startedAt:new Date().toISOString(),
       workingRecipe,
       sourceSnapshot:{
@@ -871,6 +885,7 @@ document.getElementById("bakeForm").addEventListener("submit",async e=>{
   rec.next=document.getElementById("bakeNext").value.trim();
   rec.photo=newPhoto;
   rec.status="completed";
+    rec.updatedAt = nowIso();
   rec.completedAt=new Date().toISOString();
   document.getElementById("bakeDialog").close();
   save();
@@ -1083,6 +1098,47 @@ function dataSummary(d){
   return `カスタムレシピ ${custom}件・履歴 ${history}件`;
 }
 
+
+function mergeRecordsByFreshness(remoteRecords=[], localRecords=[]){
+  const map=new Map();
+  const put=(rec, source)=>{
+    if(!rec || !rec.id) return;
+    const existing=map.get(rec.id);
+    if(!existing){
+      map.set(rec.id,{...rec});
+      return;
+    }
+    const a=recordUpdatedAt(existing);
+    const b=recordUpdatedAt(rec);
+    if(b > a){
+      map.set(rec.id,{...existing,...rec});
+    }else if(b === a){
+      // Prefer the version with more evaluation content when timestamps tie/are absent.
+      const score=x =>
+        (x?.rating ? 4 : 0) +
+        (x?.comment ? 2 : 0) +
+        (x?.next ? 1 : 0) +
+        (x?.photo ? 1 : 0) +
+        (x?.status==="completed" ? 1 : 0);
+      if(score(rec) > score(existing)) map.set(rec.id,{...existing,...rec});
+    }
+  };
+  remoteRecords.forEach(r=>put(r,"remote"));
+  localRecords.forEach(r=>put(r,"local"));
+  return Array.from(map.values());
+}
+
+function mergeRecipesById(remoteRecipes=[], localRecipes=[]){
+  const map=new Map();
+  [...remoteRecipes,...localRecipes].forEach(r=>{
+    if(!r || !r.id) return;
+    const existing=map.get(r.id);
+    if(!existing) map.set(r.id,{...r});
+    else map.set(r.id,{...existing,...r});
+  });
+  return Array.from(map.values());
+}
+
 // ==============================
 // Google Drive sync (v0.17)
 // Drive is the master after connection; localStorage remains a local cache.
@@ -1259,13 +1315,22 @@ function makeDrivePayload(){
 
 function applyDrivePayload(payload){
   if(!payload || !payload.data) throw new Error("Driveデータ形式が不正です");
-  // Never destroy older local data during migration. Merge every historical local copy.
-  let merged=mergeBreadData(payload.data, data);
-  merged=recoverAllLocalData(merged);
+
+  const remote=payload.data;
+  const local=data || {};
+
+  const merged={
+    ...remote,
+    ...local,
+    machine: remote.machine || local.machine,
+    recipes: mergeRecipesById(remote.recipes||[], local.recipes||[]),
+    records: mergeRecordsByFreshness(remote.records||[], local.records||[]),
+    settings: {...(remote.settings||{}), ...(local.settings||{})}
+  };
+
   data=merged;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   if(typeof renderAll==="function") renderAll();
-  return merged;
 }
 
 async function connectDriveAfterToken(){
