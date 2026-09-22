@@ -1,5 +1,5 @@
 
-const STORAGE_KEY = "breadLogIBM010C_v19";
+const STORAGE_KEY = "breadLogIBM010C_v20";
 
 const officialRecipeCatalog = [
 ["基本","食パン"],["基本","ハーフ食パン"],["基本","ふんわり食パン"],["基本","早焼きパン"],["基本","ごはんパン"],
@@ -146,17 +146,7 @@ function defaultData(){
     }
   });
 
-  const records=[
-      {id:"b1",recipeId:"r_bread",date:"2026-09-11",rating:"",comment:"",next:"",photo:"",status:"completed"},
-      {id:"b2",recipeId:"r_bread",date:"2026-09-13",rating:"",comment:"",next:"",photo:"",status:"completed"},
-      {id:"b3",recipeId:"r_apple1",date:"2026-09-20",rating:"",comment:"",next:"",photo:"",status:"completed"},
-      {id:"b4",recipeId:"r_edamame",date:"2026-09-21",rating:"",comment:"",next:"",photo:"",status:"completed"},
-      {id:"b5_banana",recipeId:"r_banana_cake",date:"",rating:"",comment:"",next:"",photo:"",status:"completed"}
-    ];
-  records.forEach(rec=>{
-    const src=recipes.find(r=>r.id===rec.recipeId);
-    if(src) rec.workingRecipe={name:src.name,item:src.item,menuNo:src.menuNo||"",menuName:src.menuName||"",ingredients:JSON.parse(JSON.stringify(src.ingredients||[])),steps:[...(src.steps||[])],notes:""};
-  });
+  const records=[];
   return {
     version:4,
     machine:{manufacturer:"アイリスオーヤマ",model:"IBM-010-C",color:"サンドベージュ",purchaseDate:"2026-09-07"},
@@ -170,19 +160,10 @@ function load(){
     // v0.6 data first. If absent, migrate the latest previous data once.
     let raw=localStorage.getItem(STORAGE_KEY);
     if(!raw){
-      raw=localStorage.getItem("breadLogIBM010C_v14")
-        || localStorage.getItem("breadLogIBM010C_v13")
-        || localStorage.getItem("breadLogIBM010C_v12")
-        || localStorage.getItem("breadLogIBM010C_v11")
-        || localStorage.getItem("breadLogIBM010C_v10")
-        || localStorage.getItem("breadLogIBM010C_v9")
-        || localStorage.getItem("breadLogIBM010C_v8")
-        || localStorage.getItem("breadLogIBM010C_v7")
-        || localStorage.getItem("breadLogIBM010C_v6")
-        || localStorage.getItem("breadLogIBM010C_v4")
-        || localStorage.getItem("breadLogIBM010C_v3")
-        || localStorage.getItem("breadLogIBM010C_v2")
-        || localStorage.getItem("breadLogIBM010C_v1");
+      for(let v=19;v>=1;v--){
+        const candidate=localStorage.getItem(`breadLogIBM010C_v${v}`);
+        if(candidate){ raw=candidate; break; }
+      }
     }
     if(!raw){
       const initial=defaultData();
@@ -223,39 +204,6 @@ function load(){
         if(!r.versionNote) r.versionNote="";
       }
     });
-
-
-    if(!existing.recipes.some(r=>r.id==="r_banana_cake" || (r.item==="バナナケーキ" && r.name==="バナナケーキ"))){
-      const banana=fresh.recipes.find(r=>r.id==="r_banana_cake");
-      if(banana) existing.recipes.push(banana);
-    }
-
-
-    if(!existing.records.some(rec=>rec.id==="b5_banana" || rec.recipeId==="r_banana_cake")){
-      const bananaRecipe=existing.recipes.find(r=>r.id==="r_banana_cake");
-      if(bananaRecipe){
-        existing.records.push({
-          id:"b5_banana",
-          recipeId:"r_banana_cake",
-          date:"",
-          rating:"",
-          comment:"",
-          next:"",
-          photo:"",
-          status:"completed",
-          workingRecipe:{
-            name:bananaRecipe.name,
-            item:bananaRecipe.item,
-            menuNo:bananaRecipe.menuNo||"",
-            menuName:bananaRecipe.menuName||"",
-            ingredients:JSON.parse(JSON.stringify(bananaRecipe.ingredients||[])),
-            steps:[...(bananaRecipe.steps||[])],
-            notes:""
-          }
-        });
-      }
-    }
-
 existing.records=existing.records.map(rec=>{
       if(!rec.workingRecipe){
         const src=existing.recipes.find(r=>r.id===rec.recipeId);
@@ -275,7 +223,7 @@ existing.records=existing.records.map(rec=>{
       return rec;
     });
 
-    existing.version=19;
+    existing.version=20;
     localStorage.setItem(STORAGE_KEY,JSON.stringify(existing));
     return existing;
   }catch(e){
@@ -1082,6 +1030,59 @@ renderAll();
 
 
 
+
+// v0.20 migration safety: collect all historical local copies and merge them.
+function readAllBreadLocalCopies(){
+  const copies=[];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i)||"";
+    if(!/^breadLogIBM010C_v\d+$/.test(key)) continue;
+    try{
+      const parsed=JSON.parse(localStorage.getItem(key)||"null");
+      if(parsed && Array.isArray(parsed.recipes) && Array.isArray(parsed.records)) copies.push({key,data:parsed});
+    }catch(e){}
+  }
+  return copies;
+}
+function recipeRichness(r){
+  return (r?.ingredients?.length||0)*3+(r?.steps?.length||0)*2+(r?.notes?1:0)+(r?.versionNote?1:0)+(r?.favorite?1:0);
+}
+function mergeBreadData(base, incoming){
+  const result=JSON.parse(JSON.stringify(base||defaultData()));
+  result.recipes=Array.isArray(result.recipes)?result.recipes:[];
+  result.records=Array.isArray(result.records)?result.records:[];
+  const inRecipes=Array.isArray(incoming?.recipes)?incoming.recipes:[];
+  const inRecords=Array.isArray(incoming?.records)?incoming.records:[];
+
+  inRecipes.forEach(r=>{
+    if(!r || !r.id) return;
+    const ix=result.recipes.findIndex(x=>x.id===r.id);
+    if(ix<0) result.recipes.push(JSON.parse(JSON.stringify(r)));
+    else if(recipeRichness(r)>recipeRichness(result.recipes[ix]) || !["official","web"].includes(r.type)){
+      result.recipes[ix]={...result.recipes[ix],...JSON.parse(JSON.stringify(r))};
+    }
+  });
+  inRecords.forEach(rec=>{
+    if(!rec || !rec.id) return;
+    const ix=result.records.findIndex(x=>x.id===rec.id);
+    if(ix<0) result.records.push(JSON.parse(JSON.stringify(rec)));
+    else result.records[ix]={...result.records[ix],...JSON.parse(JSON.stringify(rec))};
+  });
+  if(incoming?.machine) result.machine={...(result.machine||{}),...incoming.machine};
+  result.version=20;
+  return result;
+}
+function recoverAllLocalData(seed){
+  let merged=JSON.parse(JSON.stringify(seed||defaultData()));
+  readAllBreadLocalCopies().forEach(c=>{ merged=mergeBreadData(merged,c.data); });
+  return merged;
+}
+function dataSummary(d){
+  const custom=(d?.recipes||[]).filter(r=>!["official","web"].includes(r.type)).length;
+  const history=(d?.records||[]).length;
+  return `カスタムレシピ ${custom}件・履歴 ${history}件`;
+}
+
 // ==============================
 // Google Drive sync (v0.17)
 // Drive is the master after connection; localStorage remains a local cache.
@@ -1121,18 +1122,18 @@ function updateDriveUI(message){
   if(driveSyncing){
     pill.textContent="同期中";
     pill.classList.add("syncing");
-    text.textContent="Google Driveと同期しています";
+    text.textContent="Google Driveへ接続中（現在は端末キャッシュ表示）";
   }else if(driveConnected){
     pill.textContent="接続済み";
     pill.classList.add("connected");
-    text.textContent="Google Driveを使用中";
+    text.textContent="使用中：Google Drive";
   }else if(linked){
     pill.textContent="連携済み";
     pill.classList.add("connected");
-    text.textContent="Google Drive連携済み（再認証待ち）";
+    text.textContent="使用中：端末キャッシュ（Drive再認証待ち）";
   }else{
     pill.textContent="未接続";
-    text.textContent="未接続（端末内データを使用中）";
+    text.textContent="使用中：端末キャッシュ";
   }
 
   if(detail && message) detail.textContent=message;
@@ -1250,7 +1251,7 @@ async function updateDriveDataFile(fileId, payload){
 function makeDrivePayload(){
   return {
     schemaVersion: 1,
-    appVersion: 17,
+    appVersion: 20,
     updatedAt: new Date().toISOString(),
     data
   };
@@ -1258,43 +1259,28 @@ function makeDrivePayload(){
 
 function applyDrivePayload(payload){
   if(!payload || !payload.data) throw new Error("Driveデータ形式が不正です");
-  data = payload.data;
+  // Never destroy older local data during migration. Merge every historical local copy.
+  let merged=mergeBreadData(payload.data, data);
+  merged=recoverAllLocalData(merged);
+  data=merged;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   if(typeof renderAll==="function") renderAll();
+  return merged;
 }
 
 async function connectDriveAfterToken(){
   const existing = await findDriveDataFile();
-  const meta = getDriveMeta();
+  // Recover any recipes/history left in old localStorage versions before touching Drive.
+  data=recoverAllLocalData(data);
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
 
   if(existing){
     driveFileId = existing.id;
     const remote = await readDriveData(existing.id);
-
-    // On first connection on this device, ask which side to use when local data exists.
-    // Existing device with known Drive file: Drive wins as master.
-    if(!meta.fileId){
-      const localRaw = localStorage.getItem(STORAGE_KEY);
-      const hasLocal = !!localRaw;
-      if(hasLocal){
-        const useLocal = window.confirm(
-          "Google Driveに既存データがあります。\n\n"+
-          "OK：この端末の現在データをDriveへ上書き\n"+
-          "キャンセル：Driveのデータをこの端末へ読み込み"
-        );
-        if(useLocal){
-          await updateDriveDataFile(existing.id, makeDrivePayload());
-        }else{
-          applyDrivePayload(remote);
-        }
-      }else{
-        applyDrivePayload(remote);
-      }
-    }else{
-      applyDrivePayload(remote);
-    }
+    data=applyDrivePayload(remote);
+    // Write the merged/recovered result back to Drive so Drive becomes the complete master.
+    await updateDriveDataFile(existing.id, makeDrivePayload());
   }else{
-    // No remote data: migrate current local data as first Drive master
     const created = await createDriveDataFile(makeDrivePayload());
     driveFileId = created.id;
   }
@@ -1302,7 +1288,7 @@ async function connectDriveAfterToken(){
   driveConnected=true;
   driveSyncing=false;
   setDriveMeta({fileId:driveFileId, connected:true, lastSync:new Date().toISOString()});
-  updateDriveUI("Google Driveに接続済み。最新データを使用しています。");
+  updateDriveUI("Drive読込済み："+dataSummary(data)+"／最終同期 "+new Date().toLocaleString("ja-JP"));
 }
 
 async function syncNow(){
@@ -1316,7 +1302,7 @@ async function syncNow(){
     await updateDriveDataFile(driveFileId, makeDrivePayload());
     setDriveMeta({fileId:driveFileId, connected:true, lastSync:new Date().toISOString()});
     driveSyncing=false;
-    updateDriveUI("同期完了: "+new Date().toLocaleString("ja-JP"));
+    updateDriveUI("Drive同期完了："+dataSummary(data)+"／"+new Date().toLocaleString("ja-JP"));
   }catch(e){
     driveSyncing=false;
     updateDriveUI("同期に失敗しました: "+(e.message||e));
@@ -1356,6 +1342,13 @@ window.addEventListener("load", ()=>{
       if(initDriveClient()){
         clearInterval(timer);
         requestDriveAccess(true);
+        setTimeout(()=>{
+          if(driveAutoConnecting && !driveConnected){
+            driveSyncing=false;
+            driveAutoConnecting=false;
+            updateDriveUI("自動接続が完了しませんでした。現在は端末キャッシュを表示しています。再接続を押すとDriveを読み込みます。");
+          }
+        },8000);
       }else if(tries>=20){
         clearInterval(timer);
         updateDriveUI("Google認証ライブラリを読み込めませんでした。端末内キャッシュを表示しています。");
